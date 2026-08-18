@@ -1,4 +1,6 @@
-🥭 MangoSafe
+🥭 
+MangoSafe
+
 MangoSafe ist ein lokaler, verschlüsselter Passwort-Manager mit Fokus auf Privatsphäre und Benutzerfreundlichkeit.
 Alle deine Zugangsdaten bleiben ausschließlich auf deinem Gerät – keine Cloud, kein Sync, keine Kompromisse.
 
