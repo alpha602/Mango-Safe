@@ -22,9 +22,8 @@ Voraussetzungen:
 Python 3.10 oder neuer (falls du die Quelldateien ausführst).
 Für die Windows Hello-Integration wird Windows 10/11 benötigt.
 - - -
-
-Aus dem Quellcode starten:<img width="459" height="250" alt="Screenshot 2026-08-18 154620" src="https://github.com/user-attachments/assets/2f89e7ec-61d4-4ca2-b045-4813f18cca8d" />
-
+Aus dem Quellcode starten:
+<img width="459" height="250" alt="Screenshot 2026-08-18 154620" src="https://github.com/user-attachments/assets/2f89e7ec-61d4-4ca2-b045-4813f18cca8d" />
 - - - 
 Als eigenständige .exe (nur Windows):
 Führe einfach die mitgelieferte "build.bat" aus.
