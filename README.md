@@ -29,11 +29,11 @@ Als eigenständige .exe (nur Windows):
 Führe einfach die mitgelieferte "build.bat" aus.
 Sie installiert alle Abhängigkeiten und erstellt eine einzelne MangoSafe.exe im Ordner dist/.
 # 📦 Abhängigkeiten:
-customtkinter – moderne GUI
-cryptography – Verschlüsselung
-pywin32 & winsdk – Windows Hello-Integration (nur Windows)
-pillow – Bildverarbeitung für Icons
-pyinstaller – zum Erstellen der .exe (nur Build)
+- customtkinter – moderne GUI
+- cryptography – Verschlüsselung
+- pywin32 & winsdk – Windows Hello-Integration (nur Windows)
+- pillow – Bildverarbeitung für Icons
+- pyinstaller – zum Erstellen der .exe (nur Build)
 Die vollständige Liste findest du in der requirements.txt.
 
 # 🏗️ Build-Anleitung (für Windows-Executable):
@@ -56,7 +56,16 @@ Master-Passwort vergessen? Es gibt KEINE Wiederherstellungsmöglichkeit – dein
 Der Tresor wird nur im Arbeitsspeicher entschlüsselt; bei Sperrung wird der Schlüssel sicher gelöscht.
 Verwende ein starkes Master-Passwort (mindestens 8 Zeichen, am besten 12+ mit Sonderzeichen).
 Notiere dir am besten dein Passwort.
-
+# 🛡️ Virusscan
+Virustotal: https://www.virustotal.com/gui/file/3b921f5671c35251c8ce7ef1993d0324654828b73c0fa24760fa6baca61c1002?nocache=1
+Das ist der Scan von der .exe selbst.
+- - - 
+Der Grund für manche Flags:
+- Die .exe enthält einen komprimierten Python‑Interpreter
+- Beim Start entpackt sie diese Daten in einen temporären Ordner und führt den Python‑Code von dort aus.
+- dieses „Selbst‑Entpacken“ ähnelt dem Verhalten von vielen Trojanern und wird deshalbt geflagged.
+- API‑Aufrufe werden von manchen Antiviren‑Herstellern als potenziell schädlich gewertet, da sie oft missbraucht werden.
+- Die .exe ist nicht von einem vertrauenswürdigen Zertifikat signiert (Ich habe kein bock jährlich geld zu zahlen lol)
 # 🤝 Mitwirken:
 Du hast einen Fehler gefunden oder eine Idee für ein neues Feature?
 Öffne gerne ein Issue oder melde dich auf Discord. Beiträge sind willkommen!
