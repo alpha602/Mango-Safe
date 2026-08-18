@@ -1,74 +1,147 @@
 # 🥭 MangoSafe
-MangoSafe ist ein lokaler, verschlüsselter Passwort-Manager mit Fokus auf Privatsphäre und Benutzerfreundlichkeit.
-Alle deine Zugangsdaten bleiben ausschließlich auf deinem Gerät – keine Cloud, kein Sync, keine Kompromisse.
-# ✨ Features
-- 🔒 Ende-zu-Ende-Verschlüsselung – AES-256 mit PBKDF2 (480.000 Iterationen) und HMAC-Integritätsschutz.
-- 👤 Master-Passwort & Windows Hello – Entsperre per Master-Passwort oder optional per PIN, Fingerabdruck oder Gesichtserkennung.
-- ⏱️ Auto-Sperre – Tresor sperrt sich nach einstellbarer Inaktivität (Standard: 2 Minuten).
-- 🛡️ Sicherheits-Wipe – Nach 3 fehlgeschlagenen Anmeldeversuchen wird der Tresor sicher gelöscht (Schutz vor Diebstahl).
-- 🔍 Intelligente Suche – Durchsucht Websites und Benutzernamen, inkl. automatischer Indexierung.
-- ⭐ Favoriten – Markiere wichtige Einträge für den schnellen Zugriff.
-- 🖼️ Website-Icons – Lädt automatisch Favicons herunter und zeigt sie als Erkennungsbild an.
-- 🔑 Passwort-Generator – Erstellt sichere Passwörter (16 Zeichen, Sonderzeichen inklusive).
-- 📊 Passwortstärke – Visuelle Bewertung der eingegebenen Passwörter.
-- 🌍 Mehrsprachig – Deutsch, Englisch und Russisch (automatische Erkennung der Systemsprache).
-- 🎨 Modernes UI – Dunkel-/Hellmodus und 10 verschiedene Akzentfarben (CustomTkinter).
-# 📸 Screenshots:
-Login: <img width="2871" height="1658" alt="Screenshot 2026-08-18 153821" src="https://github.com/user-attachments/assets/43cfd06b-c323-4cb4-8850-605b2420dc14" />
-Settings: <img width="2879" height="1642" alt="Screenshot 2026-08-18 153904" src="https://github.com/user-attachments/assets/2df9fda9-c8cf-4c33-97ed-44b98077b2a9" />
-Main: <img width="2879" height="1664" alt="Screenshot 2026-08-18 153854" src="https://github.com/user-attachments/assets/5e0dd2f0-b8d3-43bb-86f8-1003a0888af9" />
-# 🚀 Installation:
-Voraussetzungen:
-Python 3.10 oder neuer (falls du die Quelldateien ausführst).
-Für die Windows Hello-Integration wird Windows 10/11 benötigt.
-- - -
-Aus dem Quellcode starten:
-<img width="459" height="250" alt="Screenshot 2026-08-18 154620" src="https://github.com/user-attachments/assets/2f89e7ec-61d4-4ca2-b045-4813f18cca8d" />
-- - - 
-Als eigenständige .exe (nur Windows):
-Führe einfach die mitgelieferte "build.bat" aus.
-Sie installiert alle Abhängigkeiten und erstellt eine einzelne MangoSafe.exe im Ordner dist/.
-# 📦 Abhängigkeiten:
-- customtkinter – moderne GUI
-- cryptography – Verschlüsselung
-- pywin32 & winsdk – Windows Hello-Integration (nur Windows)
-- pillow – Bildverarbeitung für Icons
-- pyinstaller – zum Erstellen der .exe (nur Build)
-Die vollständige Liste findest du in der requirements.txt.
 
-# 🏗️ Build-Anleitung (für Windows-Executable):
-1. Stelle sicher, dass du dich im Projektordner befindest.
-2. Doppelklicke auf build.bat oder führe sie in der Kommandozeile aus.
-3. Die fertige MangoSafe.exe liegt anschließend im Unterordner dist/.
-4. Hinweis: Die .exe ist portabel – du kannst sie auf jeden beliebigen Ordner kopieren und direkt starten.
-# ⚙️ Technische Details:
-- Verschlüsselung: Fernet (AES-256-CBC) mit HMAC-SHA256 zur Integrität.
-- Schlüsselableitung: PBKDF2-HMAC-SHA256 mit 480.000 Iterationen und 16-Byte-Salt.
-- Speicherort: depends on where you open the .bat
+**MangoSafe is a local, encrypted password manager focused on privacy and user-friendliness.**
+
+**All your credentials remain exclusively on your device – no cloud, no sync, no compromises.**
+
+# ✨ Features
+
+- 🔒 **End‑to‑end encryption** – AES‑256 with PBKDF2 (480,000 iterations) and HMAC integrity protection.
+
+- 👤 **Master password & Windows Hello** – Unlock with your master password, or optionally with PIN, fingerprint, or facial recognition.
+
+- ⏱️ **Auto‑lock** – The vault locks itself after a configurable period of inactivity (default: 2 minutes).
+
+- 🛡️ **Security wipe** – After 3 failed login attempts, the vault is securely deleted (protection against theft).
+
+- 🔍 **Smart search** – Searches through websites and usernames, including automatic indexing.
+
+- ⭐ **Favorites** – Mark important entries for quick access.
+
+- 🖼️ **Website icons** – Automatically downloads favicons and displays them as visual identifiers.
+
+- 🔑 **Password generator** – Creates secure passwords (16 characters, including special characters).
+
+- 📊 **Password strength** – Visual assessment of the passwords you enter.
+
+- 🌍 **Multilingual** – German, English, and Russian (automatic detection of system language).
+
+- 🎨 **Modern UI** – Dark/light mode and 10 different accent colors (CustomTkinter).
+
+# 📸 Screenshots:
+
+Login: <img width="2871" height="1658" alt="Screenshot 2026-08-18 153821" src="https://github.com/user-attachments/assets/43cfd06b-c323-4cb4-8850-605b2420dc14" />
+
+Settings: <img width="2879" height="1642" alt="Screenshot 2026-08-18 153904" src="https://github.com/user-attachments/assets/2df9fda9-c8cf-4c33-97ed-44b98077b2a9" />
+
+Main: <img width="2879" height="1664" alt="Screenshot 2026-08-18 153854" src="https://github.com/user-attachments/assets/5e0dd2f0-b8d3-43bb-86f8-1003a0888af9" />
+
+# 🚀 Installation:
+
+**Prerequisites:**
+
+**Python 3.10 or newer (if you are running the source files).**
+
+**Windows 10/11 is required for Windows Hello integration.**
+
+- - -
+
+**Run from source:**
+
+<img width="459" height="250" alt="Screenshot 2026-08-18 154620" src="https://github.com/user-attachments/assets/2f89e7ec-61d4-4ca2-b045-4813f18cca8d" />
+
+- - -
+
+**As a standalone .exe (Windows only):**
+
+**Simply run the included "build.bat".**
+
+**It installs all dependencies and creates a single MangoSafe.exe in the dist/ folder.**
+
+# 📦 Dependencies:
+
+- customtkinter – modern GUI
+
+- cryptography – encryption
+
+- pywin32 & winsdk – Windows Hello integration (Windows only)
+
+- pillow – image processing for icons
+
+- pyinstaller – for building the .exe (build only)
+
+**The full list can be found in requirements.txt.**
+
+
+
+# 🏗️ Build instructions (for Windows executable):
+
+**1. Make sure you are in the project folder.**
+
+**2. Double-click build.bat or run it from the command line.**
+
+**3. The finished MangoSafe.exe will then be located in the dist/ subfolder.**
+
+**4. Note: The .exe is portable – you can copy it to any folder and run it directly.**
+
+# ⚙️ Technical details:
+
+- Encryption: Fernet (AES‑256‑CBC) with HMAC‑SHA256 for integrity.
+
+- Key derivation: PBKDF2‑HMAC‑SHA256 with 480,000 iterations and a 16‑byte salt.
+
+- Storage location: depends on where you open the .bat
+
 - Windows: %APPDATA%\MangoSafe\vault.dat
+
 - Linux/macOS: ~/.mangosafe/vault.dat
-- Konfiguration: config.json im selben Verzeichnis.
-# 📄 Lizenz:
-Dieses Projekt steht unter der MIT-Lizenz – du darfst es frei nutzen, ändern und verbreiten.
-Siehe LICENSE für Details. Ich nehme KEINERLEI Verantwortung.
-# ❗ Sicherheitshinweis:
-Master-Passwort vergessen? Es gibt KEINE Wiederherstellungsmöglichkeit – deine Daten sind dann verloren.
-Der Tresor wird nur im Arbeitsspeicher entschlüsselt; bei Sperrung wird der Schlüssel sicher gelöscht.
-Verwende ein starkes Master-Passwort (mindestens 8 Zeichen, am besten 12+ mit Sonderzeichen).
-Notiere dir am besten dein Passwort.
-# 🛡️ Virusscan
+
+- Configuration: config.json in the same directory.
+
+# 📄 License:
+
+This project is licensed under the MIT License – you are free to use, modify, and distribute it.
+
+See LICENSE for details. I assume NO liability.
+
+# ❗ Security notice:
+
+**Forgot your master password? There is NO recovery option – your data will be lost.**
+
+**The vault is decrypted only in RAM; when locked, the key is securely erased.**
+
+**Use a strong master password (at least 8 characters, preferably 12+ with special characters).**
+
+**It is best to write down your password.**
+
+# 🛡️ Virus scan
+
 Virustotal: https://www.virustotal.com/gui/file/3b921f5671c35251c8ce7ef1993d0324654828b73c0fa24760fa6baca61c1002?nocache=1
-Das ist der Scan von der .exe selbst.
-- - - 
-Der Grund für manche Flags:
-- Die .exe enthält einen komprimierten Python‑Interpreter
-- Beim Start entpackt sie diese Daten in einen temporären Ordner und führt den Python‑Code von dort aus.
-- dieses „Selbst‑Entpacken“ ähnelt dem Verhalten von vielen Trojanern und wird deshalbt geflagged.
-- API‑Aufrufe werden von manchen Antiviren‑Herstellern als potenziell schädlich gewertet, da sie oft missbraucht werden.
-- Die .exe ist nicht von einem vertrauenswürdigen Zertifikat signiert (Ich habe kein bock jährlich geld zu zahlen lol)
-# 🤝 Mitwirken:
-Du hast einen Fehler gefunden oder eine Idee für ein neues Feature?
-Öffne gerne ein Issue oder melde dich auf Discord. Beiträge sind willkommen!
-# 🧑‍💻 Autor:
-Erstellt mit ❤️ von [Mango / https://github.com/alpha602] – bei Fragen oder Anregungen erreichst du mich unter [DC: Fiddlesticksz].
-# MangoSafe – Deine Daten. Deine Frucht. Deine Sicherheit. 🥭🔒
+
+This is the scan of the .exe itself.
+
+- - -
+
+**Reason for some flags:**
+
+- The .exe contains a compressed Python interpreter
+
+- When launched, it extracts these data to a temporary folder and runs the Python code from there.
+
+- This „self‑extracting“ behaviour resembles that of many trojans, which is why it gets flagged.
+
+- API calls are considered potentially malicious by some antivirus vendors because they are often abused.
+
+- The .exe is not signed by a trusted certificate (I don’t want to pay annually lol)
+
+# 🤝 Contributing:
+
+**Found a bug or have an idea for a new feature?**
+
+**Feel free to open an issue or reach out on Discord. Contributions are welcome!**
+
+# 🧑‍💻 Author:
+
+**Created with ❤️ by [Mango / https://github.com/alpha602] – for questions or suggestions, you can reach me at [DC: Fiddlesticksz].**
+
+# MangoSafe – Your data. Your fruit. Your security. 🥭🔒
