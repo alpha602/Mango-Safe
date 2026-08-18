@@ -61,8 +61,6 @@ Notiere dir am besten dein Passwort.
 # 🤝 Mitwirken:
 Du hast einen Fehler gefunden oder eine Idee für ein neues Feature?
 Öffne gerne ein Issue oder melde dich auf Discord. Beiträge sind willkommen!
-
-🧑‍💻 Autor:
-Erstellt mit ❤️ von [Dein Name/GitHub-Name] – bei Fragen oder Anregungen erreichst du mich unter [deine E-Mail oder Twitter].
-
-MangoSafe – Deine Daten. Deine Frucht. Deine Sicherheit. 🥭🔒
+# 🧑‍💻 Autor:
+Erstellt mit ❤️ von [Mango / https://github.com/alpha602] – bei Fragen oder Anregungen erreichst du mich unter [DC: Fiddlesticksz].
+# MangoSafe – Deine Daten. Deine Frucht. Deine Sicherheit. 🥭🔒
