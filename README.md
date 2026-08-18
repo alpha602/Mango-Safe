@@ -10,6 +10,7 @@ Alle deine Zugangsdaten bleiben ausschließlich auf deinem Gerät – keine Clou
 ⏱️ Auto-Sperre – Tresor sperrt sich nach einstellbarer Inaktivität (Standard: 2 Minuten).
 
 🛡️ Sicherheits-Wipe – Nach 3 fehlgeschlagenen Anmeldeversuchen wird der Tresor sicher gelöscht (Schutz vor Diebstahl).
+<img width="1894" height="816" alt="image" src="https://github.com/user-attachments/assets/9dab3ad7-0d62-4f22-97bb-a564dd406f13" />
 
 🔍 Intelligente Suche – Durchsucht Websites und Benutzernamen, inkl. automatischer Indexierung.
 
