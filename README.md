@@ -46,17 +46,10 @@ Main: <img width="2879" height="1664" alt="Screenshot 2026-08-18 153854" src="ht
 
 - - -
 
-**Run from source:**
-
-<img width="459" height="250" alt="Screenshot 2026-08-18 154620" src="https://github.com/user-attachments/assets/2f89e7ec-61d4-4ca2-b045-4813f18cca8d" />
-
-- - -
-
 **As a standalone .exe (Windows only):**
 
-**Simply run the included "build.bat".**
-
-**It installs all dependencies and creates a single MangoSafe.exe in the dist/ folder.**
+1. Simply run the included "build.bat".
+2. It installs all dependencies and creates a single MangoSafe.exe in the dist/ folder.
 
 # 📦 Dependencies:
 
