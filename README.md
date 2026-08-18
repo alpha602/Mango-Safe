@@ -27,7 +27,10 @@ Alle deine Zugangsdaten bleiben ausschließlich auf deinem Gerät – keine Clou
 🎨 Modernes UI – Dunkel-/Hellmodus und 10 verschiedene Akzentfarben (CustomTkinter).
 
 # 📸 Screenshots:
-(Hier kannst du später Screenshots einfügen – z. B. Login, Hauptansicht, Einstellungen)
+Login: <img width="2871" height="1658" alt="Screenshot 2026-08-18 153821" src="https://github.com/user-attachments/assets/43cfd06b-c323-4cb4-8850-605b2420dc14" />
+Settings: <img width="2879" height="1642" alt="Screenshot 2026-08-18 153904" src="https://github.com/user-attachments/assets/2df9fda9-c8cf-4c33-97ed-44b98077b2a9" />
+Main: <img width="2879" height="1664" alt="Screenshot 2026-08-18 153854" src="https://github.com/user-attachments/assets/5e0dd2f0-b8d3-43bb-86f8-1003a0888af9" />
+
 
 # 🚀 Installation:
 Voraussetzungen:
