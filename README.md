@@ -1,9 +1,9 @@
-#🥭 MangoSafe
+# 🥭 MangoSafe
 
 MangoSafe ist ein lokaler, verschlüsselter Passwort-Manager mit Fokus auf Privatsphäre und Benutzerfreundlichkeit.
 Alle deine Zugangsdaten bleiben ausschließlich auf deinem Gerät – keine Cloud, kein Sync, keine Kompromisse.
 
-#✨ Features
+# ✨ Features
 🔒 Ende-zu-Ende-Verschlüsselung – AES-256 mit PBKDF2 (480.000 Iterationen) und HMAC-Integritätsschutz.
 
 👤 Master-Passwort & Windows Hello – Entsperre per Master-Passwort oder optional per PIN, Fingerabdruck oder Gesichtserkennung.
@@ -11,7 +11,6 @@ Alle deine Zugangsdaten bleiben ausschließlich auf deinem Gerät – keine Clou
 ⏱️ Auto-Sperre – Tresor sperrt sich nach einstellbarer Inaktivität (Standard: 2 Minuten).
 
 🛡️ Sicherheits-Wipe – Nach 3 fehlgeschlagenen Anmeldeversuchen wird der Tresor sicher gelöscht (Schutz vor Diebstahl).
-<img width="1894" height="816" alt="image" src="https://github.com/user-attachments/assets/9dab3ad7-0d62-4f22-97bb-a564dd406f13" />
 
 🔍 Intelligente Suche – Durchsucht Websites und Benutzernamen, inkl. automatischer Indexierung.
 
@@ -27,10 +26,10 @@ Alle deine Zugangsdaten bleiben ausschließlich auf deinem Gerät – keine Clou
 
 🎨 Modernes UI – Dunkel-/Hellmodus und 10 verschiedene Akzentfarben (CustomTkinter).
 
-#📸 Screenshots:
+# 📸 Screenshots:
 (Hier kannst du später Screenshots einfügen – z. B. Login, Hauptansicht, Einstellungen)
 
-#🚀 Installation:
+# 🚀 Installation:
 Voraussetzungen:
 Python 3.10 oder neuer (falls du die Quelldateien ausführst)
 Für die Windows Hello-Integration wird Windows 10/11 benötigt.
