@@ -135,6 +135,6 @@ This is the scan of the .exe itself.
 
 # 🧑‍💻 Author:
 
-**Created with ❤️ by [Mango / https://github.com/alpha602] – for questions or suggestions, you can reach me at [DC: Fiddlesticksz].**
+**Created with ❤️ by [Mango / https://github.com/alpha602] and partly by AI [Deepseek]  – for questions or suggestions, you can reach me at [DC: Fiddlesticksz].**
 
 # MangoSafe – Your data. Your fruit. Your security. 🥭🔒
