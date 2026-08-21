@@ -134,7 +134,7 @@
 
 **# 🧑‍💻 Autor:**
 
-**Erstellt mit ❤️ von \[Mango / https://github.com/alpha602] – bei Fragen oder Anregungen erreichst du mich unter \[DC: Fiddlesticksz].**
+**Erstellt mit ❤️ von \[Mango / https://github.com/alpha602] zum Teil mit KI [Deepseek]– bei Fragen oder Anregungen erreichst du mich unter \[DC: Fiddlesticksz].**
 
 **# MangoSafe – Deine Daten. Deine Frucht. Deine Sicherheit. 🥭🔒**
 
