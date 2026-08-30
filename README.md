@@ -46,28 +46,7 @@ Main: <img width="2879" height="1664" alt="Screenshot 2026-08-18 153854" src="ht
 
 - - -
 
-**As a standalone .exe (Windows only):**
-
-1. Simply run the included "build.bat".
-2. It installs all dependencies and creates a single MangoSafe.exe in the dist/ folder.
-
-# 📦 Dependencies:
-
-- customtkinter – modern GUI
-
-- cryptography – encryption
-
-- pywin32 & winsdk – Windows Hello integration (Windows only)
-
-- pillow – image processing for icons
-
-- pyinstaller – for building the .exe (build only)
-
-**The full list can be found in requirements.txt.**
-
-
-
-# 🏗️ Build instructions (for Windows executable):
+# 🏗️ Build/Install instructions (for Windows executable):
 
 **1. Make sure you are in the project folder.**
 
