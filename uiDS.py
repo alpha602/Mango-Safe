@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import io
 import os
+import sys
 import secrets
 import hashlib
-import threading
-import contextlib
+import logging
+import string
 import urllib.request
 import concurrent.futures
-import random
-import string
 import tkinter as tk
 from tkinter import messagebox
 from pathlib import Path
@@ -28,27 +27,35 @@ try:
 except ImportError:
     _PIL_OK = False
 
+log = logging.getLogger("MangoSafe.ui")
+
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
 
+# ---------------------------------------------------------------------------
+# Design-System
+# ---------------------------------------------------------------------------
+
 THEMES = {
     "dark": {
-        "bg": "#0E0D13",
-        "sidebar": "#151319",
-        "card": "#1B1922",
-        "card_hover": "#242130",
-        "border": "#2A2733",
-        "text": "#F2F1F5",
-        "text_dim": "#9A97A6",
+        "bg": "#0B0D12",
+        "sidebar": "#10131A",
+        "card": "#151A23",
+        "card_hover": "#1D2432",
+        "border": "#242B3A",
+        "input": "#0E1219",
+        "text": "#F4F6FB",
+        "text_dim": "#8B93A7",
     },
     "light": {
-        "bg": "#D9D6E6",
-        "sidebar": "#CCC8DC",
-        "card": "#F8F7FB",
-        "card_hover": "#E8E5F1",
-        "border": "#8E88A3",
-        "text": "#0D0C13",
-        "text_dim": "#3E3949",
+        "bg": "#D2B773",
+        "sidebar": "#DBC284",
+        "card": "#E2CD93",
+        "card_hover": "#C9AE69",
+        "border": "#B49A57",
+        "input": "#EAD9A6",
+        "text": "#800000",
+        "text_dim": "#945050",
     },
 }
 
@@ -57,29 +64,44 @@ COL_SIDEBAR = THEMES["dark"]["sidebar"]
 COL_CARD = THEMES["dark"]["card"]
 COL_CARD_HOVER = THEMES["dark"]["card_hover"]
 COL_BORDER = THEMES["dark"]["border"]
+COL_INPUT = THEMES["dark"]["input"]
 COL_TEXT = THEMES["dark"]["text"]
 COL_TEXT_DIM = THEMES["dark"]["text_dim"]
-COL_DANGER = "#E14F4F"
-COL_DANGER_HOVER = "#B93E3E"
+
+COL_DANGER = "#F0564A"
+COL_DANGER_HOVER = "#D64539"
+COL_SUCCESS = "#22C55E"
+COL_WARN = "#F59E0B"
 
 
 def apply_theme(mode: str) -> None:
-    global COL_BG, COL_SIDEBAR, COL_CARD, COL_CARD_HOVER, COL_BORDER, COL_TEXT, COL_TEXT_DIM
+    global COL_BG, COL_SIDEBAR, COL_CARD, COL_CARD_HOVER, COL_BORDER
+    global COL_INPUT, COL_TEXT, COL_TEXT_DIM
     palette = THEMES.get(mode, THEMES["dark"])
     COL_BG = palette["bg"]
     COL_SIDEBAR = palette["sidebar"]
     COL_CARD = palette["card"]
     COL_CARD_HOVER = palette["card_hover"]
     COL_BORDER = palette["border"]
+    COL_INPUT = palette["input"]
     COL_TEXT = palette["text"]
     COL_TEXT_DIM = palette["text_dim"]
     ctk.set_appearance_mode("light" if mode == "light" else "dark")
 
 
+def _hex_mix(a: str, b: str, t: float) -> str:
+    ar, ag, ab = (int(a[i:i + 2], 16) for i in (1, 3, 5))
+    br, bg, bb = (int(b[i:i + 2], 16) for i in (1, 3, 5))
+    r = round(ar + (br - ar) * t)
+    g = round(ag + (bg - ag) * t)
+    bl = round(ab + (bb - ab) * t)
+    return f"#{r:02X}{g:02X}{bl:02X}"
+
+
 ACCENT_PALETTE = {
     "purple": "#8B5CF6",
-    "blue": "#3B82F6",
-    "green": "#10B981",
+    "blue": "#3E8BFF",
+    "green": "#22C55E",
     "red": "#EF4444",
     "orange": "#F59E0B",
     "pink": "#EC4899",
@@ -90,30 +112,48 @@ ACCENT_PALETTE = {
 }
 
 ACCENT_HOVER = {
-    "purple": "#7C3AED",
-    "blue": "#2563EB",
-    "green": "#059669",
+    "purple": "#7C4DEB",
+    "blue": "#2F7AEF",
+    "green": "#16A34A",
     "red": "#DC2626",
-    "orange": "#FF8800",
+    "orange": "#D97706",
     "pink": "#DB2777",
     "teal": "#0D9488",
-    "yellow": "#FFFF00",
+    "yellow": "#CA8A04",
     "indigo": "#4F46E5",
-    "rose": "#E20E91",
+    "rose": "#E11D48",
 }
 
-FONT_LOGO = ("Segoe UI", 20, "bold")
+ACCENT_GRADIENT = {
+    "purple": "#EC4899",
+    "blue": "#22D3EE",
+    "green": "#A3E635",
+    "red": "#F97316",
+    "orange": "#EF4444",
+    "pink": "#8B5CF6",
+    "teal": "#3E8BFF",
+    "yellow": "#22C55E",
+    "indigo": "#3E8BFF",
+    "rose": "#F59E0B",
+}
+
+FONT_LOGO = ("Segoe UI", 19, "bold")
 FONT_TITLE = ("Segoe UI", 22, "bold")
-FONT_SITE = ("Segoe UI", 16, "bold")
+FONT_SECTION = ("Segoe UI", 15, "bold")
+FONT_SITE = ("Segoe UI", 15, "bold")
 FONT_BODY = ("Segoe UI", 14)
 FONT_LABEL = ("Segoe UI", 13)
+FONT_SMALL = ("Segoe UI", 12)
 FONT_NAV = ("Segoe UI", 14, "bold")
-WINDOW_SIZE = "1140x760"
-SIDEBAR_WIDTH = 250
-AVATAR_SIZE = 42
-ICON_PIXELS = 42
+FONT_MONO = ("Consolas", 13)
 
-_ICON_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="mangosafe-icon")
+WINDOW_SIZE = "1160x780"
+SIDEBAR_WIDTH = 264
+AVATAR_SIZE = 44
+ICON_PIXELS = 44
+
+_ICON_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4, thread_name_prefix="mangosafe-icon")
 
 KNOWN_BRANDS = {
     "discord": {"domain": "discord.com", "color": "#5865F2", "letter": "D"},
@@ -126,42 +166,16 @@ KNOWN_BRANDS = {
     "rockstargames": {"domain": "rockstargames.com", "color": "#FCAF17", "letter": "R"},
     "nintendo": {"domain": "nintendo.com", "color": "#E60012", "letter": "N"},
     "playstation": {"domain": "playstation.com", "color": "#003791", "letter": "P"},
-    "xbox": {"domain": "xbox.com", "color": "#107C10", "letter": "X"},
-    "wattpad": {"domain": "wattpad.com", "color": "#FF6600", "letter": "W"},
-    "goodreads": {"domain": "goodreads.com", "color": "#372213", "letter": "G"},
-    "archiveofourown": {"domain": "archiveofourown.org", "color": "#990000", "letter": "A"},
-    "fanfiction": {"domain": "fanfiction.net", "color": "#336699", "letter": "F"},
-    "grammarly": {"domain": "grammarly.com", "color": "#15C39A", "letter": "G"},
-    "medium": {"domain": "medium.com", "color": "#000000", "letter": "M"},
-    "substack": {"domain": "substack.com", "color": "#FF6719", "letter": "S"},
+    "xbox": {"domain": "x.com", "color": "#107C10", "letter": "X"},
     "spotify": {"domain": "spotify.com", "color": "#1DB954", "letter": "S"},
-    "applemusic": {"domain": "apple.com", "color": "#FA233B", "letter": "A"},
-    "soundcloud": {"domain": "soundcloud.com", "color": "#FF5500", "letter": "S"},
-    "bandcamp": {"domain": "bandcamp.com", "color": "#629AA9", "letter": "B"},
-    "tidal": {"domain": "tidal.com", "color": "#000000", "letter": "T"},
-    "deezer": {"domain": "deezer.com", "color": "#00C7F2", "letter": "D"},
-    "shazam": {"domain": "shazam.com", "color": "#0088FF", "letter": "S"},
-    "lastfm": {"domain": "last.fm", "color": "#D51007", "letter": "L"},
     "github": {"domain": "github.com", "color": "#181717", "letter": "G"},
     "gitlab": {"domain": "gitlab.com", "color": "#FC6D26", "letter": "G"},
     "bitbucket": {"domain": "bitbucket.org", "color": "#0052CC", "letter": "B"},
     "stackoverflow": {"domain": "stackoverflow.com", "color": "#F48024", "letter": "S"},
     "leetcode": {"domain": "leetcode.com", "color": "#FFA116", "letter": "L"},
-    "hackerrank": {"domain": "hackerrank.com", "color": "#00EA64", "letter": "H"},
-    "codepen": {"domain": "codepen.io", "color": "#000000", "letter": "C"},
-    "replit": {"domain": "replit.com", "color": "#F26207", "letter": "R"},
-    "vercel": {"domain": "vercel.com", "color": "#000000", "letter": "V"},
-    "netlify": {"domain": "netlify.com", "color": "#00C7B7", "letter": "N"},
-    "heroku": {"domain": "heroku.com", "color": "#430098", "letter": "H"},
     "openai": {"domain": "openai.com", "color": "#10A37F", "letter": "O"},
     "anthropic": {"domain": "anthropic.com", "color": "#4F46E5", "letter": "A"},
     "huggingface": {"domain": "huggingface.co", "color": "#FFD21E", "letter": "H"},
-    "replicate": {"domain": "replicate.com", "color": "#000000", "letter": "R"},
-    "stabilityai": {"domain": "stability.ai", "color": "#5C2D91", "letter": "S"},
-    "midjourney": {"domain": "midjourney.com", "color": "#000000", "letter": "M"},
-    "runwayml": {"domain": "runwayml.com", "color": "#FF6B00", "letter": "R"},
-    "perplexity": {"domain": "perplexity.ai", "color": "#000000", "letter": "P"},
-    "poe": {"domain": "poe.com", "color": "#3B82F6", "letter": "P"},
     "apple": {"domain": "apple.com", "color": "#A2AAAD", "letter": "A"},
     "tiktok": {"domain": "tiktok.com", "color": "#000000", "letter": "T"},
     "google": {"domain": "google.com", "color": "#4285F4", "letter": "G"},
@@ -180,17 +194,12 @@ KNOWN_BRANDS = {
     "coinbase": {"domain": "coinbase.com", "color": "#0052FF", "letter": "C"},
     "binance": {"domain": "binance.com", "color": "#F0B90B", "letter": "B"},
     "kraken": {"domain": "kraken.com", "color": "#1856B4", "letter": "K"},
-    "googledrive": {"domain": "google.com", "color": "#4285F4", "letter": "G"},
     "dropbox": {"domain": "dropbox.com", "color": "#0061FF", "letter": "D"},
-    "onedrive": {"domain": "microsoft.com", "color": "#0078D4", "letter": "O"},
     "icloud": {"domain": "icloud.com", "color": "#3693F3", "letter": "I"},
-    "box": {"domain": "box.com", "color": "#0061D5", "letter": "B"},
     "mega": {"domain": "mega.nz", "color": "#D9000F", "letter": "M"},
     "netflix": {"domain": "netflix.com", "color": "#E50914", "letter": "N"},
     "disneyplus": {"domain": "disneyplus.com", "color": "#113CCF", "letter": "D"},
     "primevideo": {"domain": "amazon.com", "color": "#00A8E1", "letter": "P"},
-    "hbomax": {"domain": "hbomax.com", "color": "#9B4DFF", "letter": "H"},
-    "hulu": {"domain": "hulu.com", "color": "#1CE783", "letter": "H"},
     "crunchyroll": {"domain": "crunchyroll.com", "color": "#F47521", "letter": "C"},
     "twitch": {"domain": "twitch.tv", "color": "#9146FF", "letter": "T"},
     "amazon": {"domain": "amazon.com", "color": "#FF9900", "letter": "A"},
@@ -198,12 +207,8 @@ KNOWN_BRANDS = {
     "etsy": {"domain": "etsy.com", "color": "#F16522", "letter": "E"},
     "aliexpress": {"domain": "aliexpress.com", "color": "#FF4747", "letter": "A"},
     "zalando": {"domain": "zalando.com", "color": "#E40046", "letter": "Z"},
-    "shopify": {"domain": "shopify.com", "color": "#7AB55C", "letter": "S"},
     "booking": {"domain": "booking.com", "color": "#003580", "letter": "B"},
     "airbnb": {"domain": "airbnb.com", "color": "#FF5A5F", "letter": "A"},
-    "expedia": {"domain": "expedia.com", "color": "#0066B3", "letter": "E"},
-    "tripadvisor": {"domain": "tripadvisor.com", "color": "#34E0A1", "letter": "T"},
-    "skyscanner": {"domain": "skyscanner.com", "color": "#F05A28", "letter": "S"},
     "notion": {"domain": "notion.so", "color": "#000000", "letter": "N"},
     "trello": {"domain": "trello.com", "color": "#0052CC", "letter": "T"},
     "asana": {"domain": "asana.com", "color": "#F06A6A", "letter": "A"},
@@ -211,7 +216,12 @@ KNOWN_BRANDS = {
     "slack": {"domain": "slack.com", "color": "#4A154B", "letter": "S"},
     "teams": {"domain": "microsoft.com", "color": "#6264A7", "letter": "T"},
     "zoom": {"domain": "zoom.us", "color": "#2D8CFF", "letter": "Z"},
-    "googleworkspace": {"domain": "google.com", "color": "#4285F4", "letter": "G"},
+    "youtube": {"domain": "youtube.com", "color": "#FF0000", "letter": "Y"},
+    "facebook": {"domain": "facebook.com", "color": "#1877F2", "letter": "F"},
+    "instagram": {"domain": "instagram.com", "color": "#E4405F", "letter": "I"},
+    "twitter": {"domain": "x.com", "color": "#000000", "letter": "X"},
+    "linkedin": {"domain": "linkedin.com", "color": "#0A66C2", "letter": "L"},
+    "whatsapp": {"domain": "whatsapp.com", "color": "#25D366", "letter": "W"},
 }
 
 HASH_COLORS = ["#4C6EF5", "#12B886", "#F76707", "#E64980", "#7048E8", "#15AABF", "#F59F00"]
@@ -263,7 +273,6 @@ def _download_icon(domain: str):
             data = cache_path.read_bytes()
         else:
             data = None
-
         if data is None:
             for url in _favicon_urls(domain):
                 try:
@@ -274,10 +283,8 @@ def _download_icon(domain: str):
                         break
                 except Exception:
                     continue
-
         if data is None:
             return None
-
         cache_path.write_bytes(data)
         source = Image.open(io.BytesIO(data)).convert("RGBA")
         target = ICON_PIXELS
@@ -292,19 +299,75 @@ def _download_icon(domain: str):
         return None
 
 
+# ---------------------------------------------------------------------------
+# Lokale Statik-Icons aus dem Ordner "ICONS" (neben main.py / neben der EXE)
+# ---------------------------------------------------------------------------
+
+_STATIC_ICON_CACHE: dict[str, Optional[ctk.CTkImage]] = {}
+
+
+def _icon_search_dirs() -> list[Path]:
+    dirs: list[Path] = []
+    candidates: list[Path] = []
+    try:
+        if getattr(sys, "frozen", False):
+            candidates.append(Path(sys.executable).resolve().parent)
+            meipass = getattr(sys, "_MEIPASS", None)
+            if meipass:
+                candidates.append(Path(meipass))
+        candidates.append(Path(__file__).resolve().parent)
+        candidates.append(Path.cwd())
+    except Exception:
+        pass
+    for base in candidates:
+        d = base / "ICONS"
+        if d not in dirs:
+            dirs.append(d)
+    return dirs
+
+
+def load_static_icon(name: str, size: int) -> Optional[ctk.CTkImage]:
+    """Lädt <name>.png aus dem ICONS-Ordner und skaliert es auf size x size."""
+    if not _PIL_OK:
+        return None
+    cache_key = f"{name}@{size}"
+    if cache_key in _STATIC_ICON_CACHE:
+        return _STATIC_ICON_CACHE[cache_key]
+    img: Optional[ctk.CTkImage] = None
+    for d in _icon_search_dirs():
+        for ext in (".png", ".PNG", ".ico", ".jpg", ".jpeg", ".webp"):
+            path = d / f"{name}{ext}"
+            if path.exists():
+                try:
+                    src = Image.open(path).convert("RGBA")
+                    src = src.resize((size, size), Image.LANCZOS)
+                    img = ctk.CTkImage(light_image=src, dark_image=src, size=(size, size))
+                except Exception:
+                    img = None
+                break
+        if img is not None:
+            break
+    _STATIC_ICON_CACHE[cache_key] = img
+    return img
+
+
+# ---------------------------------------------------------------------------
+# Übersetzungen
+# ---------------------------------------------------------------------------
+
 TR = {
     "de": {
         "app_name_a": "Mango", "app_name_b": "Safe",
         "all_entries": "Alle Einträge", "favorites": "Favoriten", "settings": "Einstellungen",
+        "lock_now": "Sperren",
         "local_secure_title": "100% lokal & sicher",
         "local_secure_body": "Deine Daten bleiben nur auf deinem Gerät.",
         "search_placeholder": "Suchen...",
-        "found_results": "Gefundene Ergebnisse:",
+        "found_results": "Gefundene Ergebnisse: ",
         "no_entries": "Noch keine Einträge gespeichert.",
         "no_favorites": "Noch keine Favoriten.",
         "no_matches": "Keine Treffer für '{q}'.",
-        "new_entry": "Neuer Eintrag",
-        "edit_entry": "Eintrag bearbeiten",
+        "new_entry": "Neuer Eintrag", "edit_entry": "Eintrag bearbeiten",
         "site_placeholder": "Website / Programm...",
         "user_placeholder": "Benutzername / E-Mail...",
         "pw_placeholder": "Passwort...",
@@ -323,17 +386,19 @@ TR = {
         "create_vault": "Tresor erstellen",
         "login_pin_placeholder": "PIN oder Passwort...",
         "unlock": "Entsperren",
-        "windows_hello": "🔑 Mit Windows Hello entsperren",
+        "windows_hello": "🔑  Mit Windows Hello entsperren",
+        "forgot_password": "Master-Passwort vergessen?",
         "language": "Sprache", "design_color": "Design-Farbe",
         "appearance": "Erscheinungsbild", "mode_dark": "Dunkel", "mode_light": "Hell",
         "lang_de": "Deutsch", "lang_en": "Englisch", "lang_ru": "Russisch",
+        "section_appearance": "Sprache & Erscheinungsbild",
+        "section_security": "Sicherheit",
         "error_site_required": "Bitte einen Website-/Programmnamen angeben.",
         "error_password_required": "Bitte ein Passwort angeben.",
         "auto_lock": "Auto-Sperre (Minuten)",
         "windows_hello_label": "Windows Hello verwenden",
         "password_strength": "Passwortstärke",
         "weak": "Schwach", "medium": "Mittel", "strong": "Stark",
-        "generate_password": "Passwort generieren",
         "windows_hello_disabled": "Windows Hello ist in den Einstellungen deaktiviert.",
         "error_master_password_too_short": "Bitte ein Master-Passwort mit mindestens 8 Zeichen wählen.",
         "recovery_title": "Dein Recovery-Key",
@@ -342,7 +407,6 @@ TR = {
         "recovery_saved": "Ich habe den Recovery-Key sicher gespeichert",
         "continue": "Weiter",
         "recovery_copied": "Recovery-Key kopiert.",
-        "forgot_password": "Master-Passwort vergessen?",
         "reset_title": "Master-Passwort zurücksetzen",
         "recovery_key_placeholder": "Recovery-Key...",
         "new_master_pw_placeholder": "Neues Master-Passwort...",
@@ -362,19 +426,30 @@ TR = {
         "confirm_master_pw": "Neues Master-Passwort bestätigen...",
         "master_password_changed": "Master-Passwort geändert.",
         "error_old_password_wrong": "Altes Master-Passwort ist falsch.",
+        "error_wrong_password": "Falsches Passwort oder PIN.",
+        "error_empty_password": "Bitte Passwort oder PIN eingeben.",
+        "windows_hello_failed": "Windows Hello fehlgeschlagen. Bitte PIN/Passwort eingeben.",
+        "windows_hello_cancelled": "Windows Hello abgebrochen. Bitte PIN/Passwort eingeben.",
+        "windows_hello_unavailable": "Windows-Hello-Dialog nicht verfügbar. Bitte PIN/Passwort eingeben.",
+        "windows_hello_consent_msg": "MangoSafe entsperren – bitte mit Windows Hello bestätigen.",
+        "error_wiped": "Zu viele Fehlversuche. Tresor wurde sicher gelöscht.",
+        "lockout_msg": "Zu viele Fehlversuche. Bitte {s} s warten.",
+        "error_vault_create": "Tresor konnte nicht erstellt werden: {exc}",
+        "error_save_failed": "Speichern fehlgeschlagen: {exc}",
+        "error_delete_failed": "Löschen fehlgeschlagen: {exc}",
     },
     "en": {
         "app_name_a": "Mango", "app_name_b": "Safe",
         "all_entries": "All Entries", "favorites": "Favorites", "settings": "Settings",
-        "local_secure_title": "100% Local & secure",
+        "lock_now": "Lock",
+        "local_secure_title": "100% local & secure",
         "local_secure_body": "Your data stays only on your device.",
         "search_placeholder": "Search...",
-        "found_results": "Results found:",
+        "found_results": "Results found: ",
         "no_entries": "No entries saved yet.",
         "no_favorites": "No favorites yet.",
         "no_matches": "No matches for '{q}'.",
-        "new_entry": "New Entry",
-        "edit_entry": "Edit Entry",
+        "new_entry": "New Entry", "edit_entry": "Edit Entry",
         "site_placeholder": "Website / program...",
         "user_placeholder": "Username / email...",
         "pw_placeholder": "Password...",
@@ -393,17 +468,19 @@ TR = {
         "create_vault": "Create vault",
         "login_pin_placeholder": "PIN or password...",
         "unlock": "Unlock",
-        "windows_hello": "🔑 Unlock with Windows Hello",
+        "windows_hello": "🔑  Unlock with Windows Hello",
+        "forgot_password": "Forgot master password?",
         "language": "Language", "design_color": "Accent color",
         "appearance": "Appearance", "mode_dark": "Dark", "mode_light": "Light",
         "lang_de": "German", "lang_en": "English", "lang_ru": "Russian",
+        "section_appearance": "Language & appearance",
+        "section_security": "Security",
         "error_site_required": "Please enter a website/program name.",
         "error_password_required": "Please enter a password.",
         "auto_lock": "Auto-lock (minutes)",
         "windows_hello_label": "Use Windows Hello",
         "password_strength": "Password strength",
         "weak": "Weak", "medium": "Medium", "strong": "Strong",
-        "generate_password": "Generate password",
         "windows_hello_disabled": "Windows Hello is disabled in the settings.",
         "error_master_password_too_short": "Please choose a master password with at least 8 characters.",
         "recovery_title": "Your recovery key",
@@ -412,7 +489,6 @@ TR = {
         "recovery_saved": "I have stored the recovery key safely",
         "continue": "Continue",
         "recovery_copied": "Recovery key copied.",
-        "forgot_password": "Forgot master password?",
         "reset_title": "Reset master password",
         "recovery_key_placeholder": "Recovery key...",
         "new_master_pw_placeholder": "New master password...",
@@ -432,19 +508,30 @@ TR = {
         "confirm_master_pw": "Confirm new master password...",
         "master_password_changed": "Master password changed.",
         "error_old_password_wrong": "Old master password is wrong.",
+        "error_wrong_password": "Wrong password or PIN.",
+        "error_empty_password": "Please enter your password or PIN.",
+        "windows_hello_failed": "Windows Hello failed. Please enter your PIN/password.",
+        "windows_hello_cancelled": "Windows Hello cancelled. Please enter your PIN/password.",
+        "windows_hello_unavailable": "Windows Hello dialog not available. Please enter your PIN/password.",
+        "windows_hello_consent_msg": "Unlock MangoSafe – please confirm with Windows Hello.",
+        "error_wiped": "Too many failed attempts. Vault has been securely wiped.",
+        "lockout_msg": "Too many attempts. Please wait {s}s.",
+        "error_vault_create": "Could not create vault: {exc}",
+        "error_save_failed": "Saving failed: {exc}",
+        "error_delete_failed": "Deleting failed: {exc}",
     },
     "ru": {
         "app_name_a": "Mango", "app_name_b": "Safe",
         "all_entries": "Все записи", "favorites": "Избранное", "settings": "Настройки",
+        "lock_now": "Заблокировать",
         "local_secure_title": "100% локально и безопасно",
         "local_secure_body": "Ваши данные остаются только на вашем устройстве.",
         "search_placeholder": "Поиск...",
-        "found_results": "Найденные результаты:",
+        "found_results": "Найденные результаты: ",
         "no_entries": "Пока нет сохранённых записей.",
         "no_favorites": "Пока нет избранного.",
         "no_matches": "Нет совпадений для '{q}'.",
-        "new_entry": "Новая запись",
-        "edit_entry": "Редактировать запись",
+        "new_entry": "Новая запись", "edit_entry": "Редактировать запись",
         "site_placeholder": "Сайт / программа...",
         "user_placeholder": "Имя пользователя / email...",
         "pw_placeholder": "Пароль...",
@@ -463,17 +550,19 @@ TR = {
         "create_vault": "Создать хранилище",
         "login_pin_placeholder": "PIN или пароль...",
         "unlock": "Разблокировать",
-        "windows_hello": "🔑 Разблокировать через Windows Hello",
+        "windows_hello": "🔑  Разблокировать через Windows Hello",
+        "forgot_password": "Забыли мастер-пароль?",
         "language": "Язык", "design_color": "Акцентный цвет",
         "appearance": "Оформление", "mode_dark": "Тёмный", "mode_light": "Светлый",
         "lang_de": "Немецкий", "lang_en": "Английский", "lang_ru": "Русский",
+        "section_appearance": "Язык и оформление",
+        "section_security": "Безопасность",
         "error_site_required": "Пожалуйста, укажите сайт/программу.",
         "error_password_required": "Пожалуйста, укажите пароль.",
         "auto_lock": "Автоблокировка (минуты)",
         "windows_hello_label": "Использовать Windows Hello",
         "password_strength": "Сложность пароля",
         "weak": "Слабый", "medium": "Средний", "strong": "Сильный",
-        "generate_password": "Сгенерировать пароль",
         "windows_hello_disabled": "Windows Hello отключен в настройках.",
         "error_master_password_too_short": "Мастер-пароль должен быть не короче 8 символов.",
         "recovery_title": "Ваш ключ восстановления",
@@ -482,7 +571,6 @@ TR = {
         "recovery_saved": "Я сохранил ключ восстановления",
         "continue": "Продолжить",
         "recovery_copied": "Ключ восстановления скопирован.",
-        "forgot_password": "Забыли мастер-пароль?",
         "reset_title": "Сброс мастер-пароля",
         "recovery_key_placeholder": "Ключ восстановления...",
         "new_master_pw_placeholder": "Новый мастер-пароль...",
@@ -502,9 +590,24 @@ TR = {
         "confirm_master_pw": "Подтвердите новый пароль...",
         "master_password_changed": "Мастер-пароль изменён.",
         "error_old_password_wrong": "Старый мастер-пароль неверный.",
+        "error_wrong_password": "Неверный пароль или PIN.",
+        "error_empty_password": "Введите пароль или PIN.",
+        "windows_hello_failed": "Windows Hello не сработал. Введите PIN/пароль.",
+        "windows_hello_cancelled": "Windows Hello отменён. Введите PIN/пароль.",
+        "windows_hello_unavailable": "Диалог Windows Hello недоступен. Введите PIN/пароль.",
+        "windows_hello_consent_msg": "Разблокировка MangoSafe – подтвердите через Windows Hello.",
+        "error_wiped": "Слишком много неудачных попыток. Хранилище удалено.",
+        "lockout_msg": "Слишком много попыток. Подождите {s} с.",
+        "error_vault_create": "Не удалось создать хранилище: {exc}",
+        "error_save_failed": "Не удалось сохранить: {exc}",
+        "error_delete_failed": "Не удалось удалить: {exc}",
     },
 }
 
+
+# ---------------------------------------------------------------------------
+# UI
+# ---------------------------------------------------------------------------
 
 class MangoSafeUI:
     def __init__(self, controller: "MangoSafeApp"):
@@ -512,7 +615,7 @@ class MangoSafeUI:
         self._entries_loaded = False
         self._icon_cache: dict[str, object] = {}
         self._icon_pending: dict[str, list[ctk.CTkLabel]] = {}
-
+        self._skeleton_active = False
         self.controller = controller
         self.accent_key = getattr(controller.config, "accent_color", "purple")
         self.lang = getattr(controller.config, "language", "de")
@@ -526,12 +629,10 @@ class MangoSafeUI:
             pass
         self.root.after(1500, self._force_reveal_failsafe)
         self._revealed = False
-
         self.root.title("MangoSafe")
         self.root.geometry(WINDOW_SIZE)
-        self.root.minsize(860, 620)
+        self.root.minsize(880, 640)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-
         self.root.bind_all("<Button>", self._notify_activity, add="+")
         self.root.bind_all("<Key>", self._notify_activity, add="+")
 
@@ -548,21 +649,15 @@ class MangoSafeUI:
         self._nav_buttons: dict[str, ctk.CTkButton] = {}
         self._nav_badges: dict[str, ctk.CTkLabel] = {}
         self._search_after_id: Optional[str] = None
-        self._active_list_mode: Optional[str] = None
-        self._last_page_kind: Optional[str] = None
-        self._list_shell_built = False
-        self._badge_wrap: Optional[ctk.CTkFrame] = None
-        self._results_badge: Optional[ctk.CTkLabel] = None
         self._list_container: Optional[ctk.CTkScrollableFrame] = None
         self._search_field_widget: Optional[ctk.CTkEntry] = None
-        self._row_pool: dict[str, tuple[ctk.CTkFrame, Callable]] = {}
-        self._sync_generation = 0
-        self._CHUNK_THRESHOLD = 20
-        self._CHUNK_SIZE = 15
+        self._results_badge: Optional[ctk.CTkLabel] = None
         self._pre_login_screen = "setup"
         self._pending_setup_submit = None
         self._pending_login_submit = None
         self._pending_login_hello = None
+
+    # -- Helpers ---------------------------------------------------------------
 
     def t(self, key: str, **kwargs) -> str:
         text = TR.get(self.lang, TR["de"]).get(key, key)
@@ -576,6 +671,13 @@ class MangoSafeUI:
     def accent_hover(self) -> str:
         return ACCENT_HOVER.get(self.accent_key, ACCENT_HOVER["purple"])
 
+    @property
+    def accent_grad(self) -> str:
+        return ACCENT_GRADIENT.get(self.accent_key, self.accent)
+
+    def _tint(self, base: str, amount: float) -> str:
+        return _hex_mix(base, self.accent, amount)
+
     def run(self) -> None:
         self.root.mainloop()
 
@@ -587,6 +689,9 @@ class MangoSafeUI:
 
     def _notify_activity(self, _event=None) -> None:
         self.controller.notify_activity()
+
+    def invalidate_cache(self) -> None:
+        self._entries_loaded = False
 
     def _close_open_menu(self) -> None:
         if self._open_menu is not None:
@@ -620,38 +725,11 @@ class MangoSafeUI:
         self.page = None
         self._nav_buttons = {}
         self._nav_badges = {}
-        self._list_shell_built = False
-        self._last_page_kind = None
-        self._badge_wrap = None
-        self._results_badge = None
         self._list_container = None
         self._search_field_widget = None
-        self._active_list_mode = None
-        self._row_pool = {}
+        self._results_badge = None
         for widget in self.content.winfo_children():
             widget.destroy()
-        try:
-            self.root.update_idletasks()
-        except Exception:
-            pass
-
-    def _clear_page(self) -> None:
-        try:
-            self.root.update_idletasks()
-        except Exception:
-            pass
-        self._close_open_menu()
-        if self.page is not None:
-            for widget in self.page.winfo_children():
-                widget.destroy()
-            self.page.update_idletasks()
-        self._active_list_mode = None
-        self._list_shell_built = False
-        self._results_badge = None
-        self._badge_wrap = None
-        self._list_container = None
-        self._search_field_widget = None
-        self._row_pool = {}
         try:
             self.root.update_idletasks()
         except Exception:
@@ -694,76 +772,108 @@ class MangoSafeUI:
             pass
         self._revealed = True
 
-    def _resolve_bg(self, parent, fallback: str) -> str:
-        bg = parent.cget("fg_color")
-        if isinstance(bg, (list, tuple)):
-            bg = bg[1] if len(bg) > 1 else bg[0]
-        if not bg or bg == "transparent":
-            return fallback
-        return bg
+    # -- Skeleton-Loader (verdeckt Layout-Rebuilds) ------------------------------
+
+    def _begin_skeleton(self) -> Optional[ctk.CTkFrame]:
+        if self._skeleton_active:
+            return None
+        self._skeleton_active = True
+        overlay = ctk.CTkFrame(self.root, fg_color=COL_BG)
+        overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        sb = ctk.CTkFrame(overlay, fg_color=COL_SIDEBAR, width=SIDEBAR_WIDTH, corner_radius=0)
+        sb.pack(side="left", fill="y")
+        sb.pack_propagate(False)
+        ctk.CTkFrame(sb, fg_color=COL_CARD_HOVER, corner_radius=12,
+                     height=34, width=150).pack(anchor="w", padx=22, pady=(26, 30))
+        for _ in range(3):
+            ctk.CTkFrame(sb, fg_color=COL_CARD_HOVER, corner_radius=14,
+                         height=44).pack(fill="x", padx=14, pady=4)
+        page = ctk.CTkFrame(overlay, fg_color=COL_BG)
+        page.pack(side="left", fill="both", expand=True)
+        ctk.CTkFrame(page, fg_color=COL_CARD_HOVER, corner_radius=24,
+                     height=48).pack(fill="x", padx=26, pady=(26, 14))
+        for _ in range(6):
+            ctk.CTkFrame(page, fg_color=COL_CARD, corner_radius=18, height=78,
+                         border_width=1, border_color=COL_BORDER).pack(fill="x", padx=26, pady=6)
+        try:
+            overlay.lift()
+            self.root.update()
+        except Exception:
+            pass
+        return overlay
+
+    def _end_skeleton(self, overlay: Optional[ctk.CTkFrame]) -> None:
+        if overlay is None:
+            return
+        try:
+            overlay.destroy()
+        except Exception:
+            pass
+        self._skeleton_active = False
+
+    # -- Design-Bausteine --------------------------------------------------------
+
+    def _gradient_bar(self, parent, width: int = 150, height: int = 6,
+                      bg: Optional[str] = None) -> tk.Canvas:
+        canvas = tk.Canvas(parent, width=width, height=height,
+                           highlightthickness=0, bg=bg or COL_CARD)
+        steps = max(2, width // 4)
+        c1, c2 = self.accent, self.accent_grad
+        for i in range(steps):
+            frac = i / (steps - 1)
+            color = _hex_mix(c1, c2, frac)
+            x0 = i * width / steps
+            x1 = (i + 1) * width / steps + 1
+            canvas.create_rectangle(x0, 0, x1, height, fill=color, outline=color)
+        return canvas
 
     def _logo(self, parent) -> ctk.CTkFrame:
         wrap = ctk.CTkFrame(parent, fg_color="transparent")
-        canvas = tk.Canvas(wrap, width=32, height=32, bg=self._resolve_bg(parent, COL_SIDEBAR),
-                           highlightthickness=0)
-        canvas.pack(side="left", padx=(0, 10))
-        canvas.create_polygon(
-            16, 1, 30, 7, 30, 17, 16, 31, 2, 17, 2, 7,
-            fill="", outline=self.accent, width=2, smooth=True,
-        )
-        canvas.create_oval(9, 10, 24, 24, fill=self.accent, outline="")
-        canvas.create_line(19, 10, 23, 5, fill=self.accent, width=2)
-        a = ctk.CTkLabel(wrap, text=self.t("app_name_a"), font=FONT_LOGO, text_color=COL_TEXT)
-        a.pack(side="left")
-        b = ctk.CTkLabel(wrap, text=self.t("app_name_b"), font=FONT_LOGO, text_color=self.accent)
-        b.pack(side="left")
+        ctk.CTkLabel(wrap, text=self.t("app_name_a"), font=FONT_LOGO,
+                     text_color=COL_TEXT).pack(side="left")
+        ctk.CTkLabel(wrap, text=self.t("app_name_b"), font=FONT_LOGO,
+                     text_color=self.accent).pack(side="left")
         return wrap
 
     def _logo_stacked(self, parent) -> ctk.CTkFrame:
         wrap = ctk.CTkFrame(parent, fg_color="transparent")
-        canvas = tk.Canvas(wrap, width=56, height=56, bg=self._resolve_bg(parent, COL_BG), highlightthickness=0)
-        canvas.pack(pady=(0, 12))
-        canvas.create_polygon(
-            28, 2, 52, 13, 52, 30, 28, 54, 4, 30, 4, 13,
-            fill="", outline=self.accent, width=3, smooth=True,
-        )
-        canvas.create_oval(16, 18, 42, 42, fill=self.accent, outline="")
-        canvas.create_line(33, 18, 40, 8, fill=self.accent, width=3)
         text_row = ctk.CTkFrame(wrap, fg_color="transparent")
         text_row.pack()
         ctk.CTkLabel(text_row, text=self.t("app_name_a"), font=("Segoe UI", 26, "bold"),
                      text_color=COL_TEXT).pack(side="left")
         ctk.CTkLabel(text_row, text=self.t("app_name_b"), font=("Segoe UI", 26, "bold"),
                      text_color=self.accent).pack(side="left")
+        self._gradient_bar(wrap, width=150, height=6, bg=COL_CARD).pack(pady=(10, 0))
         return wrap
 
-    def _round_field(self, parent, placeholder: str, on_change=None) -> ctk.CTkEntry:
+    def _round_field(self, parent, placeholder: str, height: int = 46,
+                     on_change=None) -> ctk.CTkEntry:
         entry = ctk.CTkEntry(
-            parent, placeholder_text=placeholder, fg_color=COL_CARD,
-            border_color=COL_BORDER, border_width=1, corner_radius=22,
-            height=46, font=FONT_BODY, text_color=COL_TEXT,
+            parent, placeholder_text=placeholder, fg_color=COL_INPUT,
+            border_color=COL_BORDER, border_width=1, corner_radius=height // 2,
+            height=height, font=FONT_BODY, text_color=COL_TEXT,
             placeholder_text_color=COL_TEXT_DIM,
         )
+        entry.bind("<FocusIn>", lambda e: entry.configure(border_color=self.accent))
+        entry.bind("<FocusOut>", lambda e: entry.configure(border_color=COL_BORDER))
         if on_change:
             entry.bind("<KeyRelease>", lambda e: on_change(entry.get()))
         return entry
 
-    def _bind_debounced_search(self, entry: ctk.CTkEntry, callback, delay_ms: int = 400) -> None:
+    def _accent_button(self, parent, text: str, command,
+                       height=46, corner_radius=None) -> ctk.CTkButton:
+        return ctk.CTkButton(
+            parent, text=text, height=height,
+            corner_radius=corner_radius or height // 2,
+            fg_color=self.accent, hover_color=self.accent_hover,
+            font=FONT_BODY, command=command,
+        )
+
+    def _bind_debounced_search(self, entry: ctk.CTkEntry, callback, delay_ms: int = 350) -> None:
         def on_key(event=None) -> None:
             if event and event.keysym == "Escape":
                 entry.delete(0, "end")
-                self.controller.handle_search("")
-                return
-            if event and event.keysym == "BackSpace" and (event.state & 0x4):
-                text = entry.get()
-                pos = entry.index(tk.INSERT)
-                if pos > 0:
-                    start = text.rfind(' ', 0, pos)
-                    if start == -1:
-                        start = 0
-                    else:
-                        start += 1
-                    entry.delete(start, pos)
+                callback("")
                 return
             if self._search_after_id is not None:
                 try:
@@ -772,135 +882,31 @@ class MangoSafeUI:
                     pass
             query = entry.get()
             self._search_after_id = self.root.after(delay_ms, lambda: callback(query))
-
         entry.bind("<KeyRelease>", on_key)
 
-    def invalidate_cache(self) -> None:
-        self._entries_loaded = False
+    # -- Zentrierte Karten (dynamische Höhe) ---------------------------------------
 
-    def _accent_button(self, parent, text: str, command, height=46, corner_radius=22) -> ctk.CTkButton:
-        return ctk.CTkButton(
-            parent, text=text, height=height, corner_radius=corner_radius,
-            fg_color=self.accent, hover_color=self.accent_hover, font=FONT_BODY,
-            command=command,
-        )
-
-    def show_setup_screen(self, on_submit: Callable[[str], None]) -> None:
-        self._pre_login_screen = "setup"
-        self._pending_setup_submit = on_submit
+    def _center_card(self, width: int) -> tuple[ctk.CTkFrame, ctk.CTkFrame]:
         self._clear_content()
         self._language_picker_corner()
         self._theme_picker_corner()
-        card = ctk.CTkFrame(self.content, fg_color="transparent")
+        card = ctk.CTkFrame(self.content, fg_color=COL_CARD, corner_radius=28,
+                            border_width=1, border_color=COL_BORDER, width=width)
         card.place(relx=0.5, rely=0.5, anchor="center")
-        self._logo_stacked(card).pack(pady=(0, 18))
-        ctk.CTkLabel(card, text=self.t("welcome"), font=FONT_TITLE, text_color=COL_TEXT).pack(pady=(0, 8))
-        ctk.CTkLabel(card, text=self.t("setup_hint"), font=FONT_LABEL, text_color=COL_TEXT_DIM).pack(pady=(0, 22))
-        pw_entry = self._round_field(card, self.t("master_pw_placeholder"))
-        pw_entry.configure(show="•", width=380, justify="center")
-        pw_entry.pack(pady=(0, 16))
-        pw_entry.bind("<Return>", lambda e: on_submit(pw_entry.get()))
-        self._accent_button(card, self.t("create_vault"), lambda: on_submit(pw_entry.get())).pack(fill="x")
-        self._bring_to_front_centered()
-        pw_entry.focus_set()
+        card.pack_propagate(False)
+        inner = ctk.CTkFrame(card, fg_color="transparent")
+        inner.place(relx=0.5, rely=0.5, anchor="center")
+        return card, inner
 
-    def show_login_screen(
-        self, on_submit: Callable[[str], None], on_windows_hello: Callable[[], None],
-        error: Optional[str] = None,
-    ) -> None:
-        self._pre_login_screen = "login"
-        self._pending_login_submit = on_submit
-        self._pending_login_hello = on_windows_hello
-        self._clear_content()
-        self._language_picker_corner()
-        self._theme_picker_corner()
-        card = ctk.CTkFrame(self.content, fg_color="transparent")
-        card.place(relx=0.5, rely=0.5, anchor="center")
-        self._logo_stacked(card).pack(pady=(0, 22))
-        if error:
-            ctk.CTkLabel(card, text=error, font=FONT_LABEL, text_color=COL_DANGER,
-                         wraplength=380, justify="center").pack(pady=(0, 10))
-        pw_entry = self._round_field(card, self.t("login_pin_placeholder"))
-        pw_entry.configure(show="•", width=380, justify="center")
-        pw_entry.pack(pady=(4, 16))
-        pw_entry.bind("<Return>", lambda e: on_submit(pw_entry.get()))
-        self._accent_button(card, self.t("unlock"), lambda: on_submit(pw_entry.get())).pack(fill="x", pady=(0, 12))
-        ctk.CTkButton(
-            card, text=self.t("windows_hello"), height=42, corner_radius=21,
-            fg_color=COL_CARD, hover_color=COL_CARD_HOVER, text_color=COL_TEXT, font=FONT_LABEL,
-            border_width=1, border_color=COL_BORDER,
-            command=on_windows_hello,
-        ).pack(fill="x", pady=(0, 8))
+    def _fit_card(self, card: ctk.CTkFrame, inner: ctk.CTkFrame) -> None:
+        try:
+            inner.update_idletasks()
+            card.configure(height=inner.winfo_reqheight())
+            card.update_idletasks()
+        except Exception:
+            log.exception("card fit failed")
 
-        ctk.CTkButton(
-            card, text=self.t("forgot_password"), height=36, corner_radius=18,
-            fg_color="transparent", hover_color=COL_CARD_HOVER,
-            text_color=COL_TEXT_DIM, font=FONT_LABEL,
-            command=self.controller.request_reset_master_password,
-        ).pack(fill="x")
-
-        self._bring_to_front_centered()
-        pw_entry.focus_set()
-
-    def show_recovery_key(self, token: str, on_continue: Callable[[], None]) -> None:
-        self._clear_content()
-        card = ctk.CTkFrame(self.content, fg_color="transparent")
-        card.place(relx=0.5, rely=0.5, anchor="center")
-        self._logo_stacked(card).pack(pady=(0, 18))
-        ctk.CTkLabel(card, text=self.t("recovery_title"), font=FONT_TITLE, text_color=COL_TEXT).pack(pady=(0, 8))
-        ctk.CTkLabel(card, text=self.t("recovery_hint"), font=FONT_LABEL, text_color=COL_TEXT_DIM, wraplength=460, justify="center").pack(pady=(0, 18))
-        token_box = ctk.CTkLabel(card, text=token, font=("Consolas", 16), text_color=COL_TEXT, fg_color=COL_CARD, corner_radius=14, padx=18, pady=14, wraplength=460)
-        token_box.pack(pady=(0, 14))
-
-        def copy_token() -> None:
-            self.root.clipboard_clear()
-            self.root.clipboard_append(token)
-            self.root.update_idletasks()
-            self.show_toast(self.t("recovery_copied"))
-
-        ctk.CTkButton(card, text=self.t("recovery_copy"), height=40, corner_radius=20, fg_color=COL_CARD, hover_color=COL_CARD_HOVER, text_color=COL_TEXT, border_width=1, border_color=COL_BORDER, command=copy_token).pack(pady=(0, 18))
-        continue_btn = self._accent_button(card, self.t("continue"), on_continue)
-        continue_btn.configure(width=380, state="disabled")
-        saved_var = tk.BooleanVar(value=False)
-
-        def on_check() -> None:
-            continue_btn.configure(state="normal" if saved_var.get() else "disabled")
-
-        check = ctk.CTkCheckBox(card, text=self.t("recovery_saved"), variable=saved_var, font=FONT_LABEL, text_color=COL_TEXT, fg_color=self.accent, hover_color=self.accent_hover, command=on_check)
-        check.pack(pady=(0, 14))
-        continue_btn.pack()
-        self._bring_to_front_centered()
-
-    def show_reset_screen(self, on_submit: Callable[[str, str], None], error: Optional[str] = None) -> None:
-        self._clear_content()
-        card = ctk.CTkFrame(self.content, fg_color="transparent")
-        card.place(relx=0.5, rely=0.5, anchor="center")
-        self._logo_stacked(card).pack(pady=(0, 18))
-        ctk.CTkLabel(card, text=self.t("reset_title"), font=FONT_TITLE, text_color=COL_TEXT).pack(pady=(0, 10))
-        if error:
-            ctk.CTkLabel(card, text=error, font=FONT_LABEL, text_color=COL_DANGER, wraplength=380, justify="center").pack(pady=(0, 10))
-        recovery = self._round_field(card, self.t("recovery_key_placeholder"))
-        recovery.configure(width=380)
-        recovery.pack(pady=(4, 10))
-        new_pw = self._round_field(card, self.t("new_master_pw_placeholder"))
-        new_pw.configure(show="•", width=380)
-        new_pw.pack(pady=(4, 10))
-        confirm_pw = self._round_field(card, self.t("confirm_master_pw_placeholder"))
-        confirm_pw.configure(show="•", width=380)
-        confirm_pw.pack(pady=(4, 16))
-
-        def submit() -> None:
-            if new_pw.get() != confirm_pw.get():
-                self.show_error(self.t("error_password_mismatch"))
-                return
-            on_submit(recovery.get(), new_pw.get())
-
-        reset_btn = self._accent_button(card, self.t("reset_button"), submit)
-        reset_btn.configure(width=380)
-        reset_btn.pack(pady=(0, 10))
-        ctk.CTkButton(card, text=self.t("back_to_login"), height=38, corner_radius=19, fg_color="transparent", hover_color=COL_CARD_HOVER, text_color=COL_TEXT_DIM, font=FONT_LABEL, command=lambda: self.controller._show_login(error=None)).pack()
-        self._bring_to_front_centered()
-        recovery.focus_set()
+    # -- Pre-Login Screens ---------------------------------------------------------
 
     def _language_picker_corner(self) -> None:
         wrap = ctk.CTkFrame(self.content, fg_color="transparent")
@@ -908,7 +914,7 @@ class MangoSafeUI:
         for code, label in (("de", "DE"), ("en", "EN"), ("ru", "RU")):
             active = self.lang == code
             ctk.CTkButton(
-                wrap, text=label, width=38, height=30, corner_radius=8,
+                wrap, text=label, width=40, height=32, corner_radius=10,
                 fg_color=self.accent if active else COL_CARD,
                 hover_color=self.accent_hover if active else COL_CARD_HOVER,
                 text_color="white" if active else COL_TEXT_DIM,
@@ -931,7 +937,7 @@ class MangoSafeUI:
         for mode_key, label_key in (("dark", "mode_dark"), ("light", "mode_light")):
             active = self.theme_mode == mode_key
             ctk.CTkButton(
-                wrap, text=self.t(label_key), width=64, height=30, corner_radius=8,
+                wrap, text=self.t(label_key), width=68, height=32, corner_radius=10,
                 fg_color=self.accent if active else COL_CARD,
                 hover_color=self.accent_hover if active else COL_CARD_HOVER,
                 text_color="white" if active else COL_TEXT_DIM,
@@ -950,49 +956,203 @@ class MangoSafeUI:
         else:
             self.show_login_screen(self._pending_login_submit, self._pending_login_hello, error=None)
 
+    def show_setup_screen(self, on_submit: Callable[[str], None]) -> None:
+        self._pre_login_screen = "setup"
+        self._pending_setup_submit = on_submit
+        card, inner = self._center_card(470)
+        self._logo_stacked(inner).pack(pady=(34, 16))
+        ctk.CTkLabel(inner, text=self.t("welcome"), font=FONT_TITLE,
+                     text_color=COL_TEXT).pack(pady=(0, 6))
+        ctk.CTkLabel(inner, text=self.t("setup_hint"), font=FONT_LABEL,
+                     text_color=COL_TEXT_DIM).pack(pady=(0, 22))
+        pw_entry = self._round_field(inner, self.t("master_pw_placeholder"), height=48)
+        pw_entry.configure(show="•", width=380, justify="center")
+        pw_entry.pack(pady=(0, 14))
+        pw_entry.bind("<Return>", lambda e: on_submit(pw_entry.get()))
+        self._accent_button(inner, self.t("create_vault"),
+                            lambda: on_submit(pw_entry.get()), height=48).pack(pady=(0, 34))
+        self._fit_card(card, inner)
+        self._bring_to_front_centered()
+        pw_entry.focus_set()
+
+    def show_login_screen(self, on_submit: Callable[[str], None],
+                          on_windows_hello: Callable[[], None],
+                          error: Optional[str] = None) -> None:
+        self._pre_login_screen = "login"
+        self._pending_login_submit = on_submit
+        self._pending_login_hello = on_windows_hello
+        card, inner = self._center_card(470)
+        self._logo_stacked(inner).pack(pady=(34, 18))
+        if error:
+            ctk.CTkLabel(inner, text=error, font=FONT_LABEL, text_color=COL_DANGER,
+                         wraplength=380, justify="center").pack(pady=(0, 10))
+        pw_entry = self._round_field(inner, self.t("login_pin_placeholder"), height=48)
+        pw_entry.configure(show="•", width=380, justify="center")
+        pw_entry.pack(pady=(0, 14))
+        pw_entry.bind("<Return>", lambda e: on_submit(pw_entry.get()))
+        self._accent_button(inner, self.t("unlock"),
+                            lambda: on_submit(pw_entry.get()), height=48).pack(fill="x", pady=(0, 10))
+        if WindowsHello.is_available():
+            ctk.CTkButton(
+                inner, text=self.t("windows_hello"), height=44, corner_radius=22,
+                fg_color=COL_CARD_HOVER, hover_color=COL_BORDER,
+                text_color=COL_TEXT, font=FONT_LABEL,
+                border_width=1, border_color=COL_BORDER,
+                command=on_windows_hello,
+            ).pack(fill="x", pady=(0, 6))
+        ctk.CTkButton(
+            inner, text=self.t("forgot_password"), height=36, corner_radius=18,
+            fg_color="transparent", hover_color=COL_CARD_HOVER,
+            text_color=COL_TEXT_DIM, font=FONT_LABEL,
+            command=self.controller.request_reset_master_password,
+        ).pack(fill="x", pady=(0, 30))
+        self._fit_card(card, inner)
+        self._bring_to_front_centered()
+        pw_entry.focus_set()
+
+    def show_recovery_key(self, token: str, on_continue: Callable[[], None]) -> None:
+        card, inner = self._center_card(560)
+        self._logo_stacked(inner).pack(pady=(34, 14))
+        ctk.CTkLabel(inner, text=self.t("recovery_title"), font=FONT_TITLE,
+                     text_color=COL_TEXT).pack(pady=(0, 6))
+        ctk.CTkLabel(inner, text=self.t("recovery_hint"), font=FONT_LABEL,
+                     text_color=COL_TEXT_DIM, wraplength=460,
+                     justify="center").pack(pady=(0, 16))
+        ctk.CTkLabel(inner, text=token, font=("Consolas", 15),
+                     text_color=COL_TEXT, fg_color=COL_INPUT,
+                     corner_radius=16, padx=18, pady=14, wraplength=460).pack(pady=(0, 12))
+
+        def copy_token() -> None:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(token)
+            self.root.update_idletasks()
+            self.show_toast(self.t("recovery_copied"))
+
+        ctk.CTkButton(inner, text=f"📋  {self.t('recovery_copy')}", height=40,
+                      corner_radius=20, fg_color=COL_CARD_HOVER, hover_color=COL_BORDER,
+                      text_color=COL_TEXT, border_width=1, border_color=COL_BORDER,
+                      command=copy_token).pack(pady=(0, 16))
+        continue_btn = self._accent_button(inner, self.t("continue"), on_continue, height=46)
+        continue_btn.configure(width=380, state="disabled")
+        saved_var = tk.BooleanVar(value=False)
+
+        def on_check() -> None:
+            continue_btn.configure(state="normal" if saved_var.get() else "disabled")
+
+        ctk.CTkCheckBox(inner, text=self.t("recovery_saved"), variable=saved_var,
+                        font=FONT_LABEL, text_color=COL_TEXT, fg_color=self.accent,
+                        hover_color=self.accent_hover, command=on_check).pack(pady=(0, 12))
+        continue_btn.pack(pady=(0, 34))
+        self._fit_card(card, inner)
+        self._bring_to_front_centered()
+
+    def show_reset_screen(self, on_submit: Callable[[str, str], None],
+                          error: Optional[str] = None) -> None:
+        card, inner = self._center_card(470)
+        self._logo_stacked(inner).pack(pady=(34, 14))
+        ctk.CTkLabel(inner, text=self.t("reset_title"), font=FONT_TITLE,
+                     text_color=COL_TEXT).pack(pady=(0, 10))
+        if error:
+            ctk.CTkLabel(inner, text=error, font=FONT_LABEL, text_color=COL_DANGER,
+                         wraplength=380, justify="center").pack(pady=(0, 10))
+        recovery = self._round_field(inner, self.t("recovery_key_placeholder"))
+        recovery.configure(width=380)
+        recovery.pack(pady=(0, 10))
+        new_pw = self._round_field(inner, self.t("new_master_pw_placeholder"))
+        new_pw.configure(show="•", width=380)
+        new_pw.pack(pady=(0, 10))
+        confirm_pw = self._round_field(inner, self.t("confirm_master_pw_placeholder"))
+        confirm_pw.configure(show="•", width=380)
+        confirm_pw.pack(pady=(0, 14))
+
+        def submit() -> None:
+            if new_pw.get() != confirm_pw.get():
+                self.show_error(self.t("error_password_mismatch"))
+                return
+            on_submit(recovery.get(), new_pw.get())
+
+        self._accent_button(inner, self.t("reset_button"), submit,
+                            height=46).configure(width=380)
+        self._accent_button(inner, self.t("reset_button"), submit, height=46).pack(pady=(0, 8))
+        ctk.CTkButton(inner, text=self.t("back_to_login"), height=38, corner_radius=19,
+                      fg_color="transparent", hover_color=COL_CARD_HOVER,
+                      text_color=COL_TEXT_DIM, font=FONT_LABEL,
+                      command=lambda: self.controller._show_login(error=None)).pack(pady=(0, 34))
+        self._fit_card(card, inner)
+        self._bring_to_front_centered()
+        recovery.focus_set()
+
+    # -- Main Shell ------------------------------------------------------------------
+
     def _ensure_shell(self) -> None:
         if self._shell_built:
             return
         self._clear_content()
-        self.sidebar = ctk.CTkFrame(self.content, fg_color=COL_SIDEBAR, width=SIDEBAR_WIDTH, corner_radius=0)
+        self.sidebar = ctk.CTkFrame(self.content, fg_color=COL_SIDEBAR,
+                                    width=SIDEBAR_WIDTH, corner_radius=0)
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
-        self._logo(self.sidebar).pack(anchor="w", padx=20, pady=(24, 28))
-        self._add_nav_button("all", self.t("all_entries"))
-        self._add_nav_button("favorites", self.t("favorites"))
-        self._add_nav_button("settings", self.t("settings"), show_badge=False)
+        self._logo(self.sidebar).pack(anchor="w", padx=22, pady=(26, 30))
+        self._add_nav_button("all", "🔐", self.t("all_entries"))
+        self._add_nav_button("favorites", "⭐", self.t("favorites"))
+        self._add_nav_button("settings", "⚙️", self.t("settings"), show_badge=False)
         spacer = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         spacer.pack(fill="both", expand=True)
-        info = ctk.CTkFrame(self.sidebar, fg_color="#241E33", corner_radius=16)
-        info.pack(fill="x", padx=16, pady=18, side="bottom")
-        ctk.CTkLabel(info, text="🛡", font=("Segoe UI", 18), text_color=self.accent).pack(
-            anchor="w", padx=16, pady=(14, 2))
-        ctk.CTkLabel(info, text=self.t("local_secure_title"), font=("Segoe UI", 13, "bold"),
+        lock_img = load_static_icon("lock", 16)
+        if lock_img is not None:
+            ctk.CTkButton(
+                self.sidebar, image=lock_img, text=self.t("lock_now"), compound="left",
+                anchor="w", height=40, corner_radius=12,
+                fg_color="transparent", border_width=1, border_color=COL_BORDER,
+                text_color=COL_TEXT_DIM, hover_color=COL_CARD_HOVER, font=FONT_LABEL,
+                command=self.controller.request_lock_now,
+            ).pack(fill="x", padx=14, pady=(0, 10), side="bottom")
+        else:
+            ctk.CTkButton(
+                self.sidebar, text=f"🔒  {self.t('lock_now')}", height=40, corner_radius=12,
+                fg_color="transparent", border_width=1, border_color=COL_BORDER,
+                text_color=COL_TEXT_DIM, hover_color=COL_CARD_HOVER, font=FONT_LABEL,
+                command=self.controller.request_lock_now,
+            ).pack(fill="x", padx=14, pady=(0, 10), side="bottom")
+        info = ctk.CTkFrame(self.sidebar, fg_color=self._tint(COL_SIDEBAR, 0.14),
+                            corner_radius=18)
+        info.pack(fill="x", padx=14, pady=(0, 16), side="bottom")
+        ctk.CTkLabel(info, text="🛡️", font=("Segoe UI", 18),
+                     text_color=self.accent).pack(anchor="w", padx=16, pady=(14, 2))
+        ctk.CTkLabel(info, text=self.t("local_secure_title"),
+                     font=("Segoe UI", 13, "bold"),
                      text_color=self.accent).pack(anchor="w", padx=16)
-        ctk.CTkLabel(info, text=self.t("local_secure_body"), font=("Segoe UI", 11),
-                     text_color=COL_TEXT_DIM, wraplength=190, justify="left").pack(
-            anchor="w", padx=16, pady=(2, 14))
+        ctk.CTkLabel(info, text=self.t("local_secure_body"),
+                     font=("Segoe UI", 11), text_color=COL_TEXT_DIM,
+                     wraplength=200, justify="left").pack(anchor="w", padx=16, pady=(2, 14))
         self.page = ctk.CTkFrame(self.content, fg_color=COL_BG)
         self.page.pack(side="left", fill="both", expand=True)
         self._shell_built = True
         self._update_nav_active()
 
-    def _add_nav_button(self, view: str, label: str, show_badge: bool = True) -> None:
-        row = ctk.CTkButton(
-            self.sidebar, text=f"  {label}", anchor="w", height=42, corner_radius=12,
-            font=FONT_NAV, command=lambda: self._switch_view(view),
-        )
-        row.pack(fill="x", padx=16, pady=5)
+    def _add_nav_button(self, view: str, icon: str, label: str,
+                        show_badge: bool = True) -> None:
+        img = load_static_icon(view, 20)
+        if img is not None:
+            row = ctk.CTkButton(
+                self.sidebar, image=img, text=label, compound="left", anchor="w",
+                height=44, corner_radius=14, font=FONT_NAV,
+                command=lambda: self._switch_view(view),
+            )
+        else:
+            row = ctk.CTkButton(
+                self.sidebar, text=f"{icon}   {label}", anchor="w", height=44,
+                corner_radius=14, font=FONT_NAV,
+                command=lambda: self._switch_view(view),
+            )
+        row.pack(fill="x", padx=14, pady=4)
         self._nav_buttons[view] = row
         if show_badge:
-            active = self._current_view == view
             badge = ctk.CTkLabel(
-                row, text="0", font=("Segoe UI", 11, "bold"), text_color="white",
-                corner_radius=10, width=22, height=20,
-                fg_color=self.accent_hover if active else "#2A2740",
-                bg_color=self.accent if active else COL_SIDEBAR,
+                row, text="0", font=("Segoe UI", 11, "bold"), text_color=COL_TEXT_DIM,
+                corner_radius=10, width=26, height=20, fg_color="transparent",
             )
-            badge.place(relx=0.93, rely=0.5, anchor="e")
+            badge.place(relx=0.94, rely=0.5, anchor="e")
             self._nav_badges[view] = badge
 
     def _update_nav_active(self) -> None:
@@ -1006,8 +1166,8 @@ class MangoSafeUI:
         for view, badge in self._nav_badges.items():
             active = self._current_view == view
             badge.configure(
-                fg_color=self.accent_hover if active else "#2A2740",
-                bg_color=self.accent if active else COL_SIDEBAR,
+                fg_color="transparent",
+                text_color="white" if active else COL_TEXT_DIM,
             )
 
     def _update_nav_counts(self) -> None:
@@ -1019,19 +1179,23 @@ class MangoSafeUI:
             self._nav_badges["favorites"].configure(text=str(n_fav))
 
     def _switch_view(self, view: str) -> None:
-        self._current_view = view
-        self._update_nav_active()
-        self._render_page_for_current_view()
+        overlay = self._begin_skeleton()
+        try:
+            self._current_view = view
+            self._update_nav_active()
+            self._render_page_for_current_view()
+        finally:
+            self._end_skeleton(overlay)
 
     def _render_page_for_current_view(self) -> None:
+        for widget in self.page.winfo_children():
+            widget.destroy()
+        self._list_container = None
+        self._search_field_widget = None
+        self._results_badge = None
         if self._current_view == "settings":
-            self._clear_page()
             self._render_settings_page()
-            self._last_page_kind = "settings"
             return
-        if self._last_page_kind == "settings":
-            self._clear_page()
-        self._last_page_kind = "list"
         if self._current_view == "favorites":
             entries = [e for e in self._all_entries if e.favorite]
             empty_text = self.t("no_favorites")
@@ -1041,55 +1205,69 @@ class MangoSafeUI:
         self._render_list_page(entries, empty_text)
 
     def show_main_screen(self, entries: list["PasswordEntry"]) -> None:
-        self._all_entries = entries
-        if entries is not None:
-            self._cached_entries = entries
-            self._entries_loaded = True
-        if self._current_view == "settings":
-            self._current_view = "all"
-        self._ensure_shell()
-        self._update_nav_counts()
-        self._update_nav_active()
-        self._render_page_for_current_view()
-        if self._search_field_widget is not None:
-            self._search_field_widget.focus_set()
+        overlay = self._begin_skeleton()
+        try:
+            self._all_entries = entries
+            if entries is not None:
+                self._cached_entries = entries
+                self._entries_loaded = True
+            if self._current_view == "settings":
+                self._current_view = "all"
+            self._ensure_shell()
+            self._update_nav_counts()
+            self._update_nav_active()
+            self._render_page_for_current_view()
+            if self._search_field_widget is not None:
+                self._search_field_widget.focus_set()
+        finally:
+            self._end_skeleton(overlay)
 
-    def _build_top_bar(self) -> ctk.CTkEntry:
+    # -- List page ---------------------------------------------------------------------
+
+    def _build_top_bar(self) -> None:
         top = ctk.CTkFrame(self.page, fg_color="transparent")
-        top.pack(fill="x", padx=28, pady=(28, 18))
+        top.pack(fill="x", padx=26, pady=(26, 14))
         top.grid_columnconfigure(0, weight=1)
-        search = self._round_field(top, self.t("search_placeholder"))
+        search = self._round_field(top, self.t("search_placeholder"), height=48)
+        search.grid(row=0, column=0, sticky="ew", padx=(0, 12))
         self._bind_debounced_search(search, self.controller.handle_search)
-        search.grid(row=0, column=0, sticky="ew", padx=(0, 14))
         ctk.CTkButton(
-            top, text="+", width=46, height=46, corner_radius=23,
-            fg_color=self.accent, hover_color=self.accent_hover, font=("Segoe UI", 20, "bold"),
+            top, text="+", width=48, height=48, corner_radius=24,
+            fg_color=self.accent, hover_color=self.accent_hover,
+            font=("Segoe UI", 22, "bold"),
             command=self.controller.request_add_entry,
         ).grid(row=0, column=1)
         self._search_field_widget = search
-        return search
 
     def _ensure_list_shell(self) -> None:
-        if self._list_shell_built:
+        if self._list_container is not None:
             return
         self._build_top_bar()
-        self._badge_wrap = ctk.CTkFrame(self.page, fg_color="transparent", height=1)
-        self._badge_wrap.pack(fill="x", padx=28)
+        badge_wrap = ctk.CTkFrame(self.page, fg_color="transparent", height=1)
+        badge_wrap.pack(fill="x", padx=28)
         self._results_badge = ctk.CTkLabel(
-            self._badge_wrap, text=self.t("found_results"), font=FONT_LABEL, text_color=COL_TEXT_DIM,
-            fg_color=COL_CARD_HOVER, corner_radius=12, padx=14, pady=5,
+            badge_wrap, text="", font=FONT_LABEL, text_color=COL_TEXT_DIM,
+            fg_color="transparent", corner_radius=12, padx=14, pady=5,
         )
         self._list_container = ctk.CTkScrollableFrame(self.page, fg_color="transparent")
-        self._list_container.pack(fill="both", expand=True, padx=28, pady=(0, 28))
-        self._list_container.configure(
-            scrollbar_button_color=self.accent,
-            scrollbar_button_hover_color=self.accent_hover
-        )
-        self._list_container.unbind("<Configure>")
-        self._list_container.bind("<Configure>", self._update_scrollregion)
-        self._list_shell_built = True
+        self._list_container.pack(fill="both", expand=True, padx=26, pady=(0, 26))
+        try:
+            self._list_container.configure(
+                scrollbar_button_color=self.accent,
+                scrollbar_button_hover_color=self.accent_hover,
+            )
+        except Exception:
+            pass
 
-    def _update_scrollregion(self, _event=None) -> None:
+    def _clear_container(self) -> None:
+        if self._list_container is None:
+            return
+        for widget in self._list_container.winfo_children():
+            widget.destroy()
+
+    def _update_scrollregion(self) -> None:
+        if self._list_container is None:
+            return
         canvas = getattr(self._list_container, "_parent_canvas", None)
         if canvas is not None:
             try:
@@ -1097,34 +1275,23 @@ class MangoSafeUI:
             except Exception:
                 pass
 
-    @contextlib.contextmanager
-    def _suspend_scrollbar_updates(self):
-        container = self._list_container
-        if container is None:
-            yield
-            return
-        container.unbind("<Configure>")
-        try:
-            yield
-        finally:
-            container.bind("<Configure>", self._update_scrollregion)
-            self._update_scrollregion()
-
-    def _apply_list_look(self) -> None:
-        if self._results_badge is not None and self._results_badge.winfo_ismapped():
+    def _render_list_page(self, entries: list["PasswordEntry"], empty_text: str) -> None:
+        self._ensure_list_shell()
+        if self._results_badge.winfo_ismapped():
             self._results_badge.pack_forget()
         self._list_container.configure(fg_color="transparent", corner_radius=0)
-
-    def _apply_search_look(self) -> None:
-        if self._results_badge is not None and not self._results_badge.winfo_ismapped():
-            self._results_badge.pack(anchor="w", pady=(0, 10))
-        self._list_container.configure(fg_color=COL_CARD, corner_radius=18)
+        self._populate_rows(entries, empty_text)
+        if self._search_field_widget is not None:
+            self._search_field_widget.focus_set()
 
     def show_search_results(self, query: str, entries: list["PasswordEntry"]) -> None:
         self._ensure_shell()
         self._ensure_list_shell()
-        self._apply_search_look()
-        self._active_list_mode = "search"
+        self._results_badge.configure(
+            text=f"{self.t('found_results')} {len(entries)}")
+        if not self._results_badge.winfo_ismapped():
+            self._results_badge.pack(anchor="w", pady=(0, 10))
+        self._list_container.configure(fg_color=COL_CARD, corner_radius=18)
         search = self._search_field_widget
         if search is not None and search.get() != query:
             search.delete(0, "end")
@@ -1132,17 +1299,25 @@ class MangoSafeUI:
         if search is not None:
             search.focus_set()
             search.icursor(len(query))
-        self._sync_rows(self._list_container, entries, self.t("no_matches", q=query))
+        self._populate_rows(entries, self.t("no_matches", q=query))
 
-    def _render_list_page(self, entries: list["PasswordEntry"], empty_text: str) -> None:
-        self._ensure_list_shell()
-        self._apply_list_look()
-        self._active_list_mode = "list"
-        if self._search_field_widget is not None:
-            self._search_field_widget.focus_set()
-        self._sync_rows(self._list_container, entries, empty_text)
+    def _populate_rows(self, entries: list["PasswordEntry"], empty_text: Optional[str]) -> None:
+        self._clear_container()
+        if not entries:
+            ctk.CTkLabel(self._list_container, text=empty_text or "",
+                         font=FONT_BODY, text_color=COL_TEXT_DIM).pack(pady=48)
+            self._update_scrollregion()
+            return
+        for entry in entries:
+            try:
+                self._build_row(self._list_container, entry)
+            except Exception:
+                log.exception("Could not build row for %s",
+                              getattr(entry, "site", "?"))
+        self._update_scrollregion()
 
-    def _create_letter_image(self, letter: str, bg_color: str, size: int = AVATAR_SIZE) -> Optional[ctk.CTkImage]:
+    def _create_letter_image(self, letter: str, bg_color: str,
+                             size: int = AVATAR_SIZE) -> Optional[ctk.CTkImage]:
         if not _PIL_OK:
             return None
         img = Image.new("RGBA", (size, size), bg_color)
@@ -1158,152 +1333,72 @@ class MangoSafeUI:
         draw.text((x, y), letter, fill="white", font=font)
         return ctk.CTkImage(light_image=img, dark_image=img, size=(size, size))
 
-    def _build_row(self, parent) -> tuple[ctk.CTkFrame, Callable]:
-        row = ctk.CTkFrame(parent, fg_color=COL_CARD, corner_radius=16, height=72)
+    def _build_row(self, parent, entry: "PasswordEntry") -> None:
+        row = ctk.CTkFrame(parent, fg_color=COL_CARD, corner_radius=18,
+                           border_width=1, border_color=COL_BORDER, height=78)
         row.grid_columnconfigure(1, weight=1)
         row.bind("<Enter>", lambda e: row.configure(fg_color=COL_CARD_HOVER))
         row.bind("<Leave>", lambda e: row.configure(fg_color=COL_CARD))
+        row.pack(fill="x", pady=6)
         avatar = ctk.CTkLabel(
             row, text="", font=("Segoe UI", 14, "bold"), text_color="white",
-            fg_color=COL_CARD_HOVER, corner_radius=12, width=AVATAR_SIZE, height=AVATAR_SIZE,
+            fg_color=COL_CARD_HOVER, corner_radius=14,
+            width=AVATAR_SIZE, height=AVATAR_SIZE,
         )
         avatar.grid(row=0, column=0, rowspan=2, padx=(16, 14), pady=16)
-        site_label = tk.Label(row, text="", font=FONT_SITE, fg=COL_TEXT, bg=COL_CARD, bd=0)
+        site_label = ctk.CTkLabel(row, text="", font=FONT_SITE, text_color=COL_TEXT,
+                                  anchor="w")
         site_label.grid(row=0, column=1, sticky="w", pady=(14, 0))
-        user_label = tk.Label(row, text="", font=("Segoe UI", 12), fg=COL_TEXT_DIM, bg=COL_CARD, bd=0)
+        user_label = ctk.CTkLabel(row, text="", font=FONT_SMALL,
+                                  text_color=COL_TEXT_DIM, anchor="w")
         user_label.grid(row=1, column=1, sticky="w", pady=(0, 14))
-        right = tk.Frame(row, bg=COL_CARD, bd=0)
-        right.grid(row=0, column=2, rowspan=2, padx=16)
-        pw_label = tk.Label(right, text="•" * 8, font=("Consolas", 13),
-                            fg=COL_TEXT_DIM, bg=COL_CARD, bd=0, width=9, anchor="w")
-        pw_label.pack(side="left", padx=(0, 12))
-        state: dict = {"entry": None, "showing_pw": False}
+        right = ctk.CTkFrame(row, fg_color="transparent")
+        right.grid(row=0, column=2, rowspan=2, padx=14)
+        pw_label = ctk.CTkLabel(right, text="•" * 8, font=FONT_MONO,
+                                text_color=COL_TEXT_DIM, width=110, anchor="w")
+        pw_label.pack(side="left", padx=(0, 10))
+        state = {"showing_pw": False}
 
         def toggle_pw() -> None:
-            entry = state["entry"]
-            if entry is None:
-                return
             state["showing_pw"] = not state["showing_pw"]
             if state["showing_pw"]:
-                pw = entry.password
-                pw_label.configure(text=pw, width=max(9, len(pw)))
+                pw_label.configure(text=entry.password,
+                                   width=max(110, len(entry.password) * 9),
+                                   text_color=COL_TEXT)
             else:
-                pw_label.configure(text="•" * 8, width=9)
+                pw_label.configure(text="•" * 8, width=110, text_color=COL_TEXT_DIM)
 
         def copy_pw() -> None:
-            entry = state["entry"]
-            if entry is None:
-                return
             self.root.clipboard_clear()
             self.root.clipboard_append(entry.password)
             self.root.update_idletasks()
             self.show_toast(self.t("copied_toast", site=entry.site))
 
-        def make_icon(text: str, command, font_size: int = 14) -> tk.Label:
-            lbl = tk.Label(right, text=text, font=("Segoe UI", font_size), fg=COL_TEXT,
-                           bg=COL_CARD, bd=0, cursor="hand2", width=2)
-            lbl.pack(side="left", padx=3)
-            lbl.bind("<Button-1>", lambda _e: command())
-            lbl.bind("<Enter>", lambda _e: lbl.configure(bg=COL_CARD_HOVER))
-            lbl.bind("<Leave>", lambda _e: lbl.configure(bg=COL_CARD))
-            return lbl
-
-        make_icon("👁", toggle_pw)
-        make_icon("📋", copy_pw)
-        menu_lbl = make_icon("⋮", lambda: None, font_size=16)
-        menu_lbl.configure(font=("Segoe UI", 16, "bold"))
-        menu_lbl.bind("<Button-1>", lambda _e: self._open_entry_menu(menu_lbl, state["entry"]))
-
-        def apply(entry: "PasswordEntry") -> None:
-            state["entry"] = entry
-            state["showing_pw"] = False
-            pw_label.configure(text="•" * 8, width=9)
-            color, letter = _brand_for_site(entry.site)
-            letter_img = self._create_letter_image(letter, color)
-            avatar.configure(image=letter_img, text="", fg_color="transparent")
-            self._load_icon_async(entry.site, avatar)
-            star = "★ " if entry.favorite else ""
-            site_label.configure(
-                text=f"{star}{entry.site}",
-                fg="#FFD700" if entry.favorite else COL_TEXT
+        def icon_btn(symbol: str, command, font_size: int = 14) -> ctk.CTkButton:
+            return ctk.CTkButton(
+                right, text=symbol, width=36, height=36, corner_radius=12,
+                fg_color="transparent", hover_color=COL_CARD_HOVER,
+                text_color=COL_TEXT_DIM, font=("Segoe UI", font_size),
+                command=command,
             )
-            user_label.configure(text=entry.username)
 
-        return row, apply
+        icon_btn("👁", toggle_pw).pack(side="left", padx=2)
+        icon_btn("📋", copy_pw).pack(side="left", padx=2)
+        icon_btn("⋮", lambda: self._open_entry_menu(right, entry),
+                 font_size=16).pack(side="left", padx=2)
+        color, letter = _brand_for_site(entry.site)
+        letter_img = self._create_letter_image(letter, color)
+        if letter_img is not None:
+            avatar.configure(image=letter_img, text="", fg_color="transparent")
+        else:
+            avatar.configure(text=letter, fg_color=color)
+        self._load_icon_async(entry.site, avatar)
+        star = "★  " if entry.favorite else ""
+        site_label.configure(text=f"{star}{entry.site}",
+                             text_color="#FFD700" if entry.favorite else COL_TEXT)
+        user_label.configure(text=entry.username)
 
-    def _sync_rows(self, container, entries: list["PasswordEntry"], empty_text: str) -> None:
-        placeholder = getattr(container, "_mangosafe_placeholder", None)
-        if placeholder is not None:
-            placeholder.destroy()
-            container._mangosafe_placeholder = None
-        wanted_ids = [e.entry_id for e in entries]
-        wanted_set = set(wanted_ids)
-        all_valid_ids = {e.entry_id for e in self._all_entries}
-        for stale_id in [eid for eid in self._row_pool if eid not in all_valid_ids]:
-            row, _apply = self._row_pool.pop(stale_id)
-            row.destroy()
-        for eid, (row, _apply) in self._row_pool.items():
-            if eid not in wanted_set and row.winfo_ismapped():
-                row.pack_forget()
-        order_changed = wanted_ids != getattr(container, "_mangosafe_last_order", None)
-        container._mangosafe_last_order = wanted_ids
-        pending_new = sum(1 for e in entries if e.entry_id not in self._row_pool)
-        self._sync_generation += 1
-        generation = self._sync_generation
-
-        def show_placeholder_if_empty() -> None:
-            if not entries:
-                label = ctk.CTkLabel(container, text=empty_text, font=FONT_BODY, text_color=COL_TEXT_DIM)
-                label.pack(pady=44)
-                container._mangosafe_placeholder = label
-
-        if pending_new < self._CHUNK_THRESHOLD:
-            with self._suspend_scrollbar_updates():
-                for entry in entries:
-                    self._sync_one_row(container, entry, order_changed)
-            show_placeholder_if_empty()
-            return
-
-        if self._list_container is not None:
-            self._list_container.unbind("<Configure>")
-
-        def build_chunk(remaining: list["PasswordEntry"]) -> None:
-            if generation != self._sync_generation:
-                return
-            try:
-                if not container.winfo_exists():
-                    return
-            except Exception:
-                return
-            batch, rest = remaining[:self._CHUNK_SIZE], remaining[self._CHUNK_SIZE:]
-            for entry in batch:
-                self._sync_one_row(container, entry, order_changed=True)
-            if rest:
-                self.root.after(1, lambda: build_chunk(rest))
-            else:
-                if self._list_container is not None:
-                    self._list_container.bind("<Configure>", self._update_scrollregion)
-                    self._update_scrollregion()
-                show_placeholder_if_empty()
-
-        build_chunk(entries)
-
-    def _sync_one_row(self, container, entry: "PasswordEntry", order_changed: bool) -> None:
-        signature = (entry.site, entry.username, entry.password, entry.notes, entry.favorite)
-        pooled = self._row_pool.get(entry.entry_id)
-        if pooled is None:
-            row, apply_fn = self._build_row(container)
-            self._row_pool[entry.entry_id] = (row, apply_fn)
-            apply_fn(entry)
-            row._mangosafe_sig = signature
-            row.pack(fill="x", pady=7)
-            return
-        row, apply_fn = pooled
-        if getattr(row, "_mangosafe_sig", None) != signature:
-            apply_fn(entry)
-            row._mangosafe_sig = signature
-        if order_changed:
-            row.pack(fill="x", pady=7)
+    # -- Icons ------------------------------------------------------------------------
 
     def _load_icon_async(self, site: str, avatar: ctk.CTkLabel) -> None:
         domain = _domain_for_site(site)
@@ -1327,7 +1422,8 @@ class MangoSafeUI:
         if img is not None:
             for avatar in avatars:
                 try:
-                    self.root.after(0, lambda a=avatar, d=domain, i=img: self._apply_icon(a, d, i))
+                    self.root.after(0, lambda a=avatar, d=domain, i=img:
+                                    self._apply_icon(a, d, i))
                 except Exception:
                     pass
 
@@ -1335,9 +1431,13 @@ class MangoSafeUI:
         if getattr(avatar, "_mangosafe_pending_domain", None) != domain:
             return
         try:
+            if not avatar.winfo_exists():
+                return
             avatar.configure(image=image, text="", fg_color="transparent")
         except Exception:
             pass
+
+    # -- Entry menu ----------------------------------------------------------------------
 
     def _open_entry_menu(self, widget, entry: "PasswordEntry") -> None:
         self._close_open_menu()
@@ -1350,25 +1450,24 @@ class MangoSafeUI:
             popup.attributes("-transparentcolor", TRANSPARENT_KEY)
         except Exception:
             pass
-        frame = ctk.CTkFrame(popup, fg_color=COL_CARD, corner_radius=14,
+        frame = ctk.CTkFrame(popup, fg_color=COL_CARD, corner_radius=16,
                              border_width=1, border_color=COL_BORDER)
         frame.pack(fill="both", expand=True)
 
         def item(label: str, command, danger: bool = False) -> None:
-            btn = ctk.CTkButton(
-                frame, text=label, anchor="w", height=46, corner_radius=10,
+            ctk.CTkButton(
+                frame, text=label, anchor="w", height=44, corner_radius=10,
                 fg_color="transparent", hover_color=COL_CARD_HOVER,
                 text_color=COL_DANGER if danger else COL_TEXT, font=FONT_BODY,
                 command=lambda: (self._close_open_menu(), command()),
-            )
-            btn.pack(fill="x", padx=8, pady=4)
+            ).pack(fill="x", padx=8, pady=4)
 
         fav_label = self.t("favorite_off") if entry.favorite else self.t("favorite_on")
         item(fav_label, lambda: self.controller.request_toggle_favorite(entry.entry_id))
         item(self.t("edit"), lambda: self.controller.request_edit_entry(entry.entry_id))
         item(self.t("delete"), lambda: self._ask_delete(entry), danger=True)
         popup.update_idletasks()
-        menu_w, menu_h = 240, 3 * 54 + 16
+        menu_w, menu_h = 250, 3 * 52 + 16
         x = widget.winfo_rootx() - menu_w + widget.winfo_width()
         y = widget.winfo_rooty() + widget.winfo_height() + 4
         popup.geometry(f"{menu_w}x{menu_h}+{max(x, 0)}+{y}")
@@ -1377,31 +1476,43 @@ class MangoSafeUI:
         popup.after(60, popup.focus_force)
 
     def _ask_delete(self, entry: "PasswordEntry") -> None:
-        self.confirm_delete(entry, on_confirm=lambda: self.controller.request_delete_entry(entry.entry_id))
+        self.confirm_delete(entry,
+                            on_confirm=lambda: self.controller.request_delete_entry(entry.entry_id))
+
+    # -- Entry form -----------------------------------------------------------------------
 
     def show_entry_form(self, existing_entry: Optional["PasswordEntry"],
-                          on_save: Callable[[str, str, str, str], None]) -> None:
+                        on_save: Callable[[str, str, str, str], None]) -> None:
         overlay = ctk.CTkFrame(self.root, fg_color="#000000")
         overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
-        card = ctk.CTkFrame(overlay, fg_color=COL_CARD, corner_radius=20, width=460, height=540)
+        card = ctk.CTkFrame(overlay, fg_color=COL_CARD, corner_radius=24,
+                            border_width=1, border_color=COL_BORDER, width=470)
         card.place(relx=0.5, rely=0.5, anchor="center")
         card.pack_propagate(False)
+        inner = ctk.CTkFrame(card, fg_color="transparent")
+        inner.place(relx=0.5, rely=0.5, anchor="center")
         title = self.t("edit_entry") if existing_entry else self.t("new_entry")
-        header = ctk.CTkFrame(card, fg_color="transparent")
-        header.pack(fill="x", padx=24, pady=(20, 8))
-        ctk.CTkLabel(header, text=title, font=FONT_TITLE, text_color=COL_TEXT).pack(side="left")
-        ctk.CTkButton(header, text="✕", width=28, height=28, corner_radius=14, fg_color="transparent",
-                      hover_color=COL_CARD_HOVER, text_color=COL_TEXT, command=overlay.destroy).pack(side="right")
-        site = self._round_field(card, self.t("site_placeholder"))
-        site.pack(fill="x", padx=24, pady=7)
-        user = self._round_field(card, self.t("user_placeholder"))
-        user.pack(fill="x", padx=24, pady=7)
-        pw_row = ctk.CTkFrame(card, fg_color="transparent")
-        pw_row.pack(fill="x", padx=24, pady=7)
-        pw_row.grid_columnconfigure(0, weight=1)
+        header = ctk.CTkFrame(inner, fg_color="transparent")
+        header.pack(fill="x", padx=26, pady=(24, 4))
+        ctk.CTkLabel(header, text=title, font=FONT_TITLE,
+                     text_color=COL_TEXT).pack(side="left")
+        ctk.CTkButton(header, text="✕", width=30, height=30, corner_radius=15,
+                      fg_color="transparent", hover_color=COL_CARD_HOVER,
+                      text_color=COL_TEXT_DIM,
+                      command=overlay.destroy).pack(side="right")
+        self._gradient_bar(inner, width=418, height=4, bg=COL_CARD).pack(pady=(0, 14))
+        site = self._round_field(inner, self.t("site_placeholder"))
+        site.configure(width=418)
+        site.pack(pady=6)
+        user = self._round_field(inner, self.t("user_placeholder"))
+        user.configure(width=418)
+        user.pack(pady=6)
+
+        pw_row = ctk.CTkFrame(inner, fg_color="transparent", width=418)
+        pw_row.pack(pady=6)
         password = self._round_field(pw_row, self.t("pw_placeholder"))
-        password.configure(show="•")
-        password.grid(row=0, column=0, sticky="ew")
+        password.configure(show="•", width=418)
+        password.pack(fill="x")
 
         def generate_password() -> None:
             chars = string.ascii_letters + string.digits + "!@#$%^&*()-_=+[]{}|;:,.<>?"
@@ -1410,25 +1521,37 @@ class MangoSafeUI:
             password.insert(0, pw)
             update_strength()
 
-        gen_btn = ctk.CTkButton(pw_row, text="🔑", width=38, height=38, corner_radius=19,
-                                fg_color=COL_CARD_HOVER, hover_color=COL_BORDER, text_color=COL_TEXT,
-                                command=generate_password)
-        gen_btn.grid(row=0, column=1, padx=(4, 0))
-
         def toggle_visibility():
             password.configure(show="" if password.cget("show") else "•")
 
-        eye_btn = ctk.CTkButton(pw_row, text="👁", width=38, height=38, corner_radius=19,
-                                fg_color=COL_CARD_HOVER, hover_color=COL_BORDER, text_color=COL_TEXT,
-                                command=toggle_visibility)
-        eye_btn.grid(row=0, column=2, padx=(4, 0))
-        strength_label = ctk.CTkLabel(card, text="", font=FONT_LABEL, text_color=COL_TEXT_DIM)
-        strength_label.pack(fill="x", padx=24, pady=(0, 7))
+        def pw_icon_btn(symbol: str, command) -> ctk.CTkButton:
+            return ctk.CTkButton(
+                pw_row, text=symbol, width=28, height=28, corner_radius=14,
+                fg_color=COL_INPUT, hover_color=COL_CARD_HOVER,
+                border_width=1, border_color=COL_BORDER,
+                text_color=COL_TEXT_DIM, font=("Segoe UI", 11),
+                command=command,
+            )
+
+        key_btn = pw_icon_btn("🔑", generate_password)
+        eye_btn = pw_icon_btn("👁", toggle_visibility)
+        key_btn.place(relx=1.0, rely=0.5, anchor="e", x=-40)
+        eye_btn.place(relx=1.0, rely=0.5, anchor="e", x=-8)
+
+        strength_label = ctk.CTkLabel(inner, text="", font=FONT_LABEL,
+                                      text_color=COL_TEXT_DIM, width=418, anchor="w")
+        strength_label.pack(pady=(6, 2))
+        strength_bar = ctk.CTkProgressBar(inner, height=6, corner_radius=3,
+                                          fg_color=COL_BORDER, progress_color=COL_DANGER,
+                                          width=418)
+        strength_bar.pack(pady=(0, 8))
+        strength_bar.set(0)
 
         def update_strength():
             pw = password.get()
             if not pw:
                 strength_label.configure(text="")
+                strength_bar.set(0)
                 return
             score = 0
             if len(pw) >= 8:
@@ -1444,15 +1567,19 @@ class MangoSafeUI:
             if score <= 2:
                 text, color = self.t("weak"), COL_DANGER
             elif score <= 4:
-                text, color = self.t("medium"), "#F59E0B"
+                text, color = self.t("medium"), COL_WARN
             else:
-                text, color = self.t("strong"), "#10B981"
-            strength_label.configure(text=f"{self.t('password_strength')}: {text}", text_color=color)
+                text, color = self.t("strong"), COL_SUCCESS
+            strength_label.configure(
+                text=f"{self.t('password_strength')}: {text}", text_color=color)
+            strength_bar.configure(progress_color=color)
+            strength_bar.set(score / 5)
 
         password.bind("<KeyRelease>", lambda e: update_strength())
         self.root.after(100, update_strength)
-        notes = self._round_field(card, self.t("notes_placeholder"))
-        notes.pack(fill="x", padx=24, pady=7)
+        notes = self._round_field(inner, self.t("notes_placeholder"))
+        notes.configure(width=418)
+        notes.pack(pady=6)
         if existing_entry:
             site.insert(0, existing_entry.site)
             user.insert(0, existing_entry.username)
@@ -1464,76 +1591,127 @@ class MangoSafeUI:
             on_save(site.get(), user.get(), password.get(), notes.get())
             overlay.destroy()
 
-        btn_row = ctk.CTkFrame(card, fg_color="transparent")
-        btn_row.pack(fill="x", padx=24, pady=(20, 22), side="bottom")
-        ctk.CTkButton(btn_row, text=self.t("cancel"), height=44, corner_radius=22,
-                      fg_color=COL_CARD_HOVER, hover_color=COL_BORDER, text_color=COL_TEXT,
-                      command=overlay.destroy).pack(side="left", expand=True, fill="x", padx=(0, 7))
-        self._accent_button(btn_row, self.t("save"), submit).pack(side="left", expand=True, fill="x", padx=(7, 0))
+        btn_row = ctk.CTkFrame(inner, fg_color="transparent")
+        btn_row.pack(pady=(18, 26))
+        ctk.CTkButton(btn_row, text=self.t("cancel"), height=46, corner_radius=23,
+                      width=200, fg_color=COL_CARD_HOVER, hover_color=COL_BORDER,
+                      text_color=COL_TEXT,
+                      command=overlay.destroy).pack(side="left", padx=(0, 7))
+        self._accent_button(btn_row, self.t("save"), submit,
+                            height=46).configure(width=200)
+        self._accent_button(btn_row, self.t("save"), submit, height=46).pack(side="left", padx=(7, 0))
+        self._fit_card(card, inner)
         site.focus_set()
 
+    # -- Settings ---------------------------------------------------------------------------
+
+    def _settings_card(self, parent, title: str) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=COL_CARD, corner_radius=20,
+                            border_width=1, border_color=COL_BORDER)
+        card.pack(fill="x", pady=(0, 14))
+        ctk.CTkLabel(card, text=title, font=FONT_SECTION,
+                     text_color=COL_TEXT).pack(anchor="w", padx=22, pady=(18, 4))
+        inner = ctk.CTkFrame(card, fg_color="transparent")
+        inner.pack(fill="x", padx=22, pady=(6, 20))
+        return inner
+
     def _render_settings_page(self) -> None:
-        wrap = ctk.CTkFrame(self.page, fg_color="transparent")
-        wrap.pack(fill="both", expand=True, padx=36, pady=36)
-        ctk.CTkLabel(wrap, text=self.t("settings"), font=FONT_TITLE, text_color=COL_TEXT).pack(
-            anchor="w", pady=(0, 28))
-        ctk.CTkLabel(wrap, text=self.t("language"), font=("Segoe UI", 14, "bold"),
-                     text_color=COL_TEXT).pack(anchor="w", pady=(0, 10))
-        lang_options = {"de": self.t("lang_de"), "en": self.t("lang_en"), "ru": self.t("lang_ru")}
+        scroll = ctk.CTkScrollableFrame(self.page, fg_color="transparent",
+                                        scrollbar_button_color=self.accent,
+                                        scrollbar_button_hover_color=self.accent_hover)
+        scroll.pack(fill="both", expand=True, padx=26, pady=(24, 26))
+        ctk.CTkLabel(scroll, text=self.t("settings"), font=FONT_TITLE,
+                     text_color=COL_TEXT).pack(anchor="w", pady=(0, 18))
+        inner = self._settings_card(scroll, self.t("section_appearance"))
+        ctk.CTkLabel(inner, text=self.t("language"), font=FONT_LABEL,
+                     text_color=COL_TEXT_DIM).pack(anchor="w", pady=(0, 6))
+        lang_options = {"de": self.t("lang_de"), "en": self.t("lang_en"),
+                        "ru": self.t("lang_ru")}
         lang_var = tk.StringVar(value=lang_options.get(self.lang, self.t("lang_de")))
 
         def on_lang_pick(choice: str):
             code = next((k for k, v in lang_options.items() if v == choice), "de")
             self.lang = code
             self.controller.set_language(code)
-            self._clear_content()
-            self.show_main_screen(self._all_entries)
-            self._switch_view("settings")
+            self._refresh_keep_settings()
 
         ctk.CTkOptionMenu(
-            wrap, values=list(lang_options.values()), variable=lang_var,
-            command=on_lang_pick, fg_color=COL_CARD, button_color=self.accent,
+            inner, values=list(lang_options.values()), variable=lang_var,
+            command=on_lang_pick, fg_color=COL_INPUT, button_color=self.accent,
             button_hover_color=self.accent_hover, dropdown_fg_color=COL_CARD,
             text_color=COL_TEXT, dropdown_text_color=COL_TEXT,
             dropdown_hover_color=COL_CARD_HOVER,
-            width=240, height=42, corner_radius=14, font=FONT_BODY,
-        ).pack(anchor="w", pady=(0, 28))
-        ctk.CTkLabel(wrap, text=self.t("auto_lock"), font=("Segoe UI", 14, "bold"),
-                     text_color=COL_TEXT).pack(anchor="w", pady=(0, 10))
-        lock_frame = ctk.CTkFrame(wrap, fg_color="transparent")
-        lock_frame.pack(anchor="w", fill="x", pady=(0, 28))
+            width=260, height=42, corner_radius=14, font=FONT_BODY,
+        ).pack(anchor="w", pady=(0, 16))
+        ctk.CTkLabel(inner, text=self.t("appearance"), font=FONT_LABEL,
+                     text_color=COL_TEXT_DIM).pack(anchor="w", pady=(0, 6))
+        mode_row = ctk.CTkFrame(inner, fg_color="transparent")
+        mode_row.pack(anchor="w")
+        for mode_key, label_key in (("dark", "mode_dark"), ("light", "mode_light")):
+            active = self.theme_mode == mode_key
+            ctk.CTkButton(
+                mode_row, text=self.t(label_key), width=120, height=42, corner_radius=14,
+                fg_color=self.accent if active else COL_INPUT,
+                hover_color=self.accent_hover if active else COL_CARD_HOVER,
+                text_color="white" if active else COL_TEXT, font=FONT_BODY,
+                border_width=0 if active else 1, border_color=COL_BORDER,
+                command=lambda m=mode_key: self._pick_theme_mode(m),
+            ).pack(side="left", padx=(0, 10))
+        inner = self._settings_card(scroll, self.t("design_color"))
+        swatch_row = ctk.CTkFrame(inner, fg_color="transparent")
+        swatch_row.pack(anchor="w")
+        for key, hexval in ACCENT_PALETTE.items():
+            border = 3 if key == self.accent_key else 0
+            ctk.CTkButton(
+                swatch_row, text="", width=40, height=40, corner_radius=20,
+                fg_color=hexval, hover_color=hexval,
+                border_width=border, border_color="white",
+                command=lambda k=key: self._pick_accent(k),
+            ).pack(side="left", padx=(0, 10))
+        inner = self._settings_card(scroll, self.t("section_security"))
+        ctk.CTkLabel(inner, text=self.t("auto_lock"), font=FONT_LABEL,
+                     text_color=COL_TEXT_DIM).pack(anchor="w", pady=(0, 6))
+        lock_frame = ctk.CTkFrame(inner, fg_color="transparent")
+        lock_frame.pack(fill="x", pady=(0, 16))
         current_minutes = getattr(self.controller.config, "auto_lock_minutes", 2)
-        lock_slider = ctk.CTkSlider(lock_frame, from_=1, to=30, number_of_steps=29,
-                                    command=lambda v: lock_label.configure(text=f"{int(v)} min"))
+        lock_slider = ctk.CTkSlider(
+            lock_frame, from_=1, to=30, number_of_steps=29,
+            button_color=self.accent, button_hover_color=self.accent_hover,
+            progress_color=self.accent, fg_color=COL_BORDER,
+            command=lambda v: lock_label.configure(text=f"{int(v)} min"))
         lock_slider.set(current_minutes)
-        lock_slider.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        lock_label = ctk.CTkLabel(lock_frame, text=f"{int(lock_slider.get())} min", font=FONT_BODY, text_color=COL_TEXT)
+        lock_slider.pack(side="left", fill="x", expand=True, padx=(0, 12))
+        lock_label = ctk.CTkLabel(lock_frame, text=f"{int(lock_slider.get())} min",
+                                  font=FONT_BODY, text_color=COL_TEXT, width=60)
         lock_label.pack(side="left")
-        lock_slider.bind("<ButtonRelease-1>", lambda e: self.controller.set_auto_lock_minutes(int(lock_slider.get())))
-        ctk.CTkLabel(wrap, text=self.t("windows_hello_label"), font=("Segoe UI", 14, "bold"),
-                     text_color=COL_TEXT).pack(anchor="w", pady=(0, 10))
+        lock_slider.bind("<ButtonRelease-1>",
+                         lambda e: self.controller.set_auto_lock_minutes(int(lock_slider.get())))
+        ctk.CTkLabel(inner, text=self.t("windows_hello_label"), font=FONT_LABEL,
+                     text_color=COL_TEXT_DIM).pack(anchor="w", pady=(0, 6))
         hello_var = tk.BooleanVar(value=getattr(self.controller.config, "use_windows_hello", True))
-        hello_switch = ctk.CTkSwitch(wrap, text="", variable=hello_var,
-                                     command=lambda: self.controller.set_use_windows_hello(hello_var.get()))
-        hello_switch.pack(anchor="w", pady=(0, 28))
-
-        ctk.CTkLabel(wrap, text=self.t("recovery_key_settings"), font=("Segoe UI", 14, "bold"),
-                     text_color=COL_TEXT).pack(anchor="w", pady=(0, 10))
-        recovery_btn = self._accent_button(wrap, self.t("create_recovery_key"), self.controller.request_create_recovery_key, height=42, corner_radius=14)
-        recovery_btn.configure(width=260)
-        recovery_btn.pack(anchor="w", pady=(0, 28))
-
-        ctk.CTkLabel(wrap, text=self.t("change_master_pw"), font=("Segoe UI", 14, "bold"),
-                     text_color=COL_TEXT).pack(anchor="w", pady=(0, 10))
-        old_pw = self._round_field(wrap, self.t("old_master_pw"))
+        ctk.CTkSwitch(inner, text="", variable=hello_var,
+                      progress_color=self.accent, button_color=COL_CARD_HOVER,
+                      button_hover_color=COL_BORDER,
+                      command=lambda: self.controller.set_use_windows_hello(hello_var.get()),
+                      ).pack(anchor="w", pady=(0, 18))
+        ctk.CTkLabel(inner, text=self.t("recovery_key_settings"), font=FONT_LABEL,
+                     text_color=COL_TEXT_DIM).pack(anchor="w", pady=(0, 6))
+        recovery_btn = self._accent_button(inner, self.t("create_recovery_key"),
+                                           self.controller.request_create_recovery_key,
+                                           height=42, corner_radius=14)
+        recovery_btn.configure(width=280)
+        recovery_btn.pack(anchor="w", pady=(0, 18))
+        ctk.CTkLabel(inner, text=self.t("change_master_pw"), font=FONT_LABEL,
+                     text_color=COL_TEXT_DIM).pack(anchor="w", pady=(0, 6))
+        old_pw = self._round_field(inner, self.t("old_master_pw"))
         old_pw.configure(show="•")
-        old_pw.pack(fill="x", pady=6)
-        new_pw = self._round_field(wrap, self.t("new_master_pw"))
+        old_pw.pack(fill="x", pady=4)
+        new_pw = self._round_field(inner, self.t("new_master_pw"))
         new_pw.configure(show="•")
-        new_pw.pack(fill="x", pady=6)
-        confirm_pw = self._round_field(wrap, self.t("confirm_master_pw"))
+        new_pw.pack(fill="x", pady=4)
+        confirm_pw = self._round_field(inner, self.t("confirm_master_pw"))
         confirm_pw.configure(show="•")
-        confirm_pw.pack(fill="x", pady=6)
+        confirm_pw.pack(fill="x", pady=4)
 
         def change_pw() -> None:
             if new_pw.get() != confirm_pw.get():
@@ -1541,65 +1719,47 @@ class MangoSafeUI:
                 return
             self.controller.change_master_password(old_pw.get(), new_pw.get())
 
-        change_btn = self._accent_button(wrap, self.t("change_master_pw"), change_pw)
-        change_btn.configure(width=260)
-        change_btn.pack(anchor="w", pady=(12, 28))
+        change_btn = self._accent_button(inner, self.t("change_master_pw"), change_pw,
+                                         height=42, corner_radius=14)
+        change_btn.configure(width=280)
+        change_btn.pack(anchor="w", pady=(10, 0))
 
-        ctk.CTkLabel(wrap, text=self.t("design_color"), font=("Segoe UI", 14, "bold"),
-                     text_color=COL_TEXT).pack(anchor="w", pady=(0, 10))
-        swatch_row = ctk.CTkFrame(wrap, fg_color="transparent")
-        swatch_row.pack(anchor="w", pady=(0, 28))
-        for key, hexval in ACCENT_PALETTE.items():
-            border = 3 if key == self.accent_key else 0
-            ctk.CTkButton(
-                swatch_row, text="", width=38, height=38, corner_radius=19,
-                fg_color=hexval, hover_color=hexval,
-                border_width=border, border_color="white",
-                command=lambda k=key: self._pick_accent(k),
-            ).pack(side="left", padx=7)
-        ctk.CTkLabel(wrap, text=self.t("appearance"), font=("Segoe UI", 14, "bold"),
-                     text_color=COL_TEXT).pack(anchor="w", pady=(0, 10))
-        mode_row = ctk.CTkFrame(wrap, fg_color="transparent")
-        mode_row.pack(anchor="w")
-        for mode_key, label_key in (("dark", "mode_dark"), ("light", "mode_light")):
-            active = self.theme_mode == mode_key
-            ctk.CTkButton(
-                mode_row, text=self.t(label_key), width=110, height=40, corner_radius=14,
-                fg_color=self.accent if active else COL_CARD,
-                hover_color=self.accent_hover if active else COL_CARD_HOVER,
-                text_color="white" if active else COL_TEXT, font=FONT_BODY,
-                border_width=0 if active else 1, border_color=COL_BORDER,
-                command=lambda m=mode_key: self._pick_theme_mode(m),
-            ).pack(side="left", padx=(0, 10))
+    def _refresh_keep_settings(self) -> None:
+        overlay = self._begin_skeleton()
+        try:
+            self._clear_content()
+            self.show_main_screen(self._all_entries)
+            self._switch_view("settings")
+        finally:
+            self._end_skeleton(overlay)
 
     def _pick_theme_mode(self, mode: str) -> None:
         self.theme_mode = mode
         apply_theme(mode)
         self.controller.set_theme_mode(mode)
         self.root.configure(fg_color=COL_BG)
-        self._clear_content()
-        self.show_main_screen(self._all_entries)
-        self._switch_view("settings")
+        self._refresh_keep_settings()
 
     def _pick_accent(self, key: str) -> None:
         self.accent_key = key
         self.controller.set_accent_color(key)
-        self._clear_content()
-        self.show_main_screen(self._all_entries)
-        self._switch_view("settings")
+        self._refresh_keep_settings()
+
+    # -- Toast / Dialogs -----------------------------------------------------------------------
 
     def show_toast(self, message: str) -> None:
         if self._toast_label is not None:
             self._toast_label.destroy()
         if self.theme_mode == "light":
-            bg_color = "#E8E5F1"
-            text_color = "#0D0C13"
+            bg_color = COL_CARD
+            text_color = COL_TEXT
         else:
             bg_color = self.accent
             text_color = "white"
         self._toast_label = ctk.CTkLabel(
             self.root, text=message, font=FONT_LABEL, text_color=text_color,
-            fg_color=bg_color, corner_radius=18, padx=18, pady=9,
+            fg_color=bg_color, corner_radius=24, padx=20, pady=10,
+            border_width=1, border_color=COL_BORDER,
         )
         self._toast_label.place(relx=0.5, rely=0.95, anchor="s")
         self._toast_label.bind("<Button-1>", lambda e: self._clear_toast())
