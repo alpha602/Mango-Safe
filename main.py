@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 APP_NAME = "MangoSafe"
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.5.0"
 
 if os.name == "nt":
     APP_DATA_DIR = Path(os.environ.get("APPDATA", Path.home())) / APP_NAME
@@ -27,7 +27,6 @@ LOG_FILE = APP_DATA_DIR / "mangosafe.log"
 DEFAULT_AUTO_LOCK_MINUTES = 2
 MAX_QUICK_ATTEMPTS = 3
 LOCKOUT_SECONDS = 30
-
 SUPPORTED_LANGUAGES = ("de", "en", "ru")
 
 
@@ -36,11 +35,11 @@ def _detect_system_language() -> str:
     if os.name == "nt":
         try:
             import ctypes
-            lcid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
             import locale as _locale
-            windows_locale = _locale.windows_locale.get(lcid)
-            if windows_locale:
-                candidates.append(windows_locale)
+            lcid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+            win_loc = _locale.windows_locale.get(lcid)
+            if win_loc:
+                candidates.append(win_loc)
         except Exception:
             pass
     try:
@@ -83,7 +82,7 @@ class PasswordEntry:
 class AppConfig:
     auto_lock_minutes: int = DEFAULT_AUTO_LOCK_MINUTES
     use_windows_hello: bool = True
-    first_run_completed: bool = False
+    first_run_configured: bool = False
     theme: str = "dark"
     language: str = "de"
     accent_color: str = "purple"
@@ -188,8 +187,9 @@ class MangoSafeApp:
     def __init__(self):
         self.log = logging.getLogger(__name__)
         self.config = AppConfig.load()
-        from vault import Vault
+        from vault import Vault, WindowsHello
         from uiDS import MangoSafeUI
+        self.WindowsHello = WindowsHello
         self.vault = Vault(VAULT_FILE)
         self.ui = MangoSafeUI(self)
         self.throttle = LoginThrottle()
@@ -220,6 +220,8 @@ class MangoSafeApp:
     def notify_activity(self) -> None:
         self.auto_lock.notify_activity()
 
+    # -- Setup / Login ---------------------------------------------------------
+
     def handle_first_time_setup(self, master_password: str) -> None:
         master_password = (master_password or "").strip()
         if len(master_password) < 8:
@@ -230,12 +232,13 @@ class MangoSafeApp:
             recovery_token = self.vault.create(master_password)
         except Exception as exc:
             self.log.exception("Could not create vault.")
-            self.ui.show_error(f"Tresor konnte nicht erstellt werden: {exc}")
+            self.ui.show_error(self.ui.t("error_vault_create", exc=exc))
             self.ui.show_setup_screen(on_submit=self.handle_first_time_setup)
             return
-        self.config.first_run_completed = True
+        self.config.first_run_configured = True
         self.config.save()
-        self.ui.show_recovery_key(recovery_token, lambda: self._finish_first_time_setup(master_password))
+        self.ui.show_recovery_key(
+            recovery_token, lambda: self._finish_first_time_setup(master_password))
 
     def _finish_first_time_setup(self, master_password: str) -> None:
         if self.vault.unlock(master_password):
@@ -250,8 +253,11 @@ class MangoSafeApp:
             error=error,
         )
 
-    def handle_windows_hello_attempt(self, auto_triggered: bool = False) -> None:
+    def handle_windows_hello_attempt(self) -> None:
         if not self.config.use_windows_hello:
+            self._reject_login(self.ui.t("windows_hello_disabled"))
+            return
+        if not self.vault.is_windows_hello_enabled():
             self._reject_login(self.ui.t("windows_hello_disabled"))
             return
         if self.throttle.is_locked():
@@ -260,27 +266,39 @@ class MangoSafeApp:
 
         def worker() -> None:
             try:
-                owner_hwnd = self.ui.root.winfo_id()
-                success = self.vault.try_windows_hello(owner_hwnd=owner_hwnd)
+                consent = self.WindowsHello.request_user_consent(
+                    self.ui.t("windows_hello_consent_msg"))
             except Exception:
-                success = False
-            self.ui.root.after(0, lambda: self._finish_windows_hello_attempt(success, auto_triggered))
+                self.log.exception("Consent request crashed.")
+                consent = None
+            if consent is True:
+                outcome = "ok" if self.vault.unlock_with_windows_hello() else "failed"
+            elif consent is False:
+                outcome = "cancelled"
+            else:
+                outcome = "unavailable"
+            self.ui.root.after(
+                0, lambda: self._finish_windows_hello_attempt(outcome))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _finish_windows_hello_attempt(self, success: bool, auto_triggered: bool) -> None:
+    def _finish_windows_hello_attempt(self, outcome: str) -> None:
         self.ui._bring_to_front_centered()
-        if success:
+        if outcome == "ok":
             self.throttle.register_success()
             self._on_unlocked()
-        elif not auto_triggered:
+        elif outcome == "cancelled":
+            self._reject_login(self.ui.t("windows_hello_cancelled"))
+        elif outcome == "unavailable":
+            self._reject_login(self.ui.t("windows_hello_unavailable"))
+        else:  # failed
             if self.throttle.register_failure():
                 if self.vault.has_recovery_key():
                     self._reject_login(self._lockout_message())
                 else:
                     self._trigger_security_wipe()
             else:
-                self._reject_login("Windows Hello fehlgeschlagen. Bitte PIN/Passwort eingeben.")
+                self._reject_login(self.ui.t("windows_hello_failed"))
 
     def handle_login_attempt(self, password_or_pin: str) -> None:
         if self.throttle.is_locked():
@@ -288,11 +306,12 @@ class MangoSafeApp:
             return
         password_or_pin = (password_or_pin or "").strip()
         if not password_or_pin:
-            self._reject_login("Bitte Passwort oder PIN eingeben.")
+            self._reject_login(self.ui.t("error_empty_password"))
             return
         try:
             success = self.vault.unlock(password_or_pin)
         except Exception:
+            self.log.exception("Unlock crashed.")
             success = False
         if success:
             self.throttle.register_success()
@@ -303,7 +322,7 @@ class MangoSafeApp:
             else:
                 self._trigger_security_wipe()
         else:
-            self._reject_login("Falsches Passwort/PIN.")
+            self._reject_login(self.ui.t("error_wrong_password"))
 
     def _trigger_security_wipe(self) -> None:
         try:
@@ -311,21 +330,20 @@ class MangoSafeApp:
         except Exception:
             pass
         self.throttle.register_success()
-        self.config.first_run_completed = False
+        self.config.first_run_configured = False
         self.config.save()
-        self.ui.show_error("Zu viele Fehlversuche. Tresor wurde gelöscht.")
+        self.ui.show_error(self.ui.t("error_wiped"))
         self.ui.show_setup_screen(on_submit=self.handle_first_time_setup)
 
     def _reject_login(self, message: str) -> None:
         self._show_login(error=message)
 
     def _lockout_message(self) -> str:
-        return f"Zu viele Fehlversuche. Bitte {self.throttle.seconds_remaining()}s warten."
+        return self.ui.t("lockout_msg", s=self.throttle.seconds_remaining())
 
     def _on_unlocked(self) -> None:
         self.auto_lock.start()
-        entries = self._load_entries_safely()
-        self.ui.show_main_screen(entries)
+        self.ui.show_main_screen(self._load_entries_safely())
 
     def _handle_auto_lock(self) -> None:
         if self.vault.is_unlocked():
@@ -339,6 +357,15 @@ class MangoSafeApp:
         except Exception:
             return []
 
+    def _refresh_main_screen_safe(self) -> None:
+        try:
+            self.ui.show_main_screen(self._load_entries_safely())
+            self.ui.invalidate_cache()
+        except Exception:
+            self.log.exception("UI refresh failed.")
+
+    # -- Entries ---------------------------------------------------------------
+
     def request_add_entry(self) -> None:
         self.ui.show_entry_form(existing_entry=None, on_save=self.handle_add_entry)
 
@@ -346,18 +373,39 @@ class MangoSafeApp:
         entry = self._find_entry(entry_id)
         if entry is None:
             return
+
         def on_save(site: str, username: str, password: str, notes: str = "") -> None:
             self.handle_edit_entry(entry_id, site, username, password, notes)
+
         self.ui.show_entry_form(existing_entry=entry, on_save=on_save)
 
-    def handle_edit_entry(self, entry_id: str, site: str, username: str, password: str, notes: str = "") -> None:
+    def handle_add_entry(self, site: str, username: str, password: str, notes: str = "") -> None:
+        if not site or not site.strip():
+            self.ui.show_error(self.ui.t("error_site_required"))
+            return
+        if not password:
+            self.ui.show_error(self.ui.t("error_password_required"))
+            return
         try:
-            self.vault.update_entry(entry_id, site=site, username=username, password=password, notes=notes)
-            self.ui.show_toast(f"'{site}' gespeichert.")
-            self.ui.show_main_screen(self._load_entries_safely())
-            self.ui.invalidate_cache()
-        except Exception:
-            self.ui.show_error("Speichern fehlgeschlagen.")
+            self.vault.add_entry(site=site, username=username, password=password, notes=notes)
+        except Exception as exc:
+            self.log.exception("add_entry failed.")
+            self.ui.show_error(self.ui.t("error_save_failed", exc=exc))
+            return
+        self.ui.show_toast(self.ui.t("saved_toast", site=site))
+        self._refresh_main_screen_safe()
+
+    def handle_edit_entry(self, entry_id: str, site: str, username: str,
+                          password: str, notes: str = "") -> None:
+        try:
+            self.vault.update_entry(entry_id, site=site, username=username,
+                                    password=password, notes=notes)
+        except Exception as exc:
+            self.log.exception("update_entry failed.")
+            self.ui.show_error(self.ui.t("error_save_failed", exc=exc))
+            return
+        self.ui.show_toast(self.ui.t("saved_toast", site=site))
+        self._refresh_main_screen_safe()
 
     def request_toggle_favorite(self, entry_id: str) -> None:
         entry = self._find_entry(entry_id)
@@ -365,36 +413,25 @@ class MangoSafeApp:
             return
         try:
             self.vault.update_entry(entry_id, favorite=not entry.favorite)
-            self.ui.show_main_screen(self._load_entries_safely())
+            self._refresh_main_screen_safe()
         except Exception:
-            pass
+            self.log.exception("toggle favorite failed.")
+
+    def request_delete_entry(self, entry_id: str) -> None:
+        try:
+            self.vault.delete_entry(entry_id)
+        except Exception as exc:
+            self.log.exception("delete_entry failed.")
+            self.ui.show_error(self.ui.t("error_delete_failed", exc=exc))
+            return
+        self.ui.show_toast(self.ui.t("deleted_toast"))
+        self._refresh_main_screen_safe()
 
     def _find_entry(self, entry_id: str) -> Optional[PasswordEntry]:
         for entry in self._load_entries_safely():
             if entry.entry_id == entry_id:
                 return entry
         return None
-
-    def handle_add_entry(self, site: str, username: str, password: str, notes: str = "") -> None:
-        if not site or not password:
-            self.ui.show_error("Website und Passwort sind Pflicht.")
-            return
-        try:
-            self.vault.add_entry(site=site, username=username, password=password, notes=notes)
-            self.ui.show_toast(f"'{site}' gespeichert.")
-            self.ui.show_main_screen(self._load_entries_safely())
-            self.ui.invalidate_cache()
-        except Exception:
-            self.ui.show_error("Speichern fehlgeschlagen.")
-
-    def request_delete_entry(self, entry_id: str) -> None:
-        try:
-            self.vault.delete_entry(entry_id)
-            self.ui.show_toast("Eintrag gelöscht.")
-            self.ui.show_main_screen(self._load_entries_safely())
-            self.ui.invalidate_cache()
-        except Exception:
-            self.ui.show_error("Löschen fehlgeschlagen.")
 
     def handle_search(self, query: str) -> None:
         if not query.strip():
@@ -404,7 +441,9 @@ class MangoSafeApp:
             results = self.vault.search_entries(query)
             self.ui.show_search_results(query, results)
         except Exception:
-            pass
+            self.log.exception("search failed.")
+
+    # -- Settings ---------------------------------------------------------------
 
     def set_auto_lock_minutes(self, minutes: int) -> None:
         self.config.auto_lock_minutes = max(1, int(minutes))
@@ -432,6 +471,8 @@ class MangoSafeApp:
     def request_lock_now(self) -> None:
         self._handle_auto_lock()
 
+    # -- Recovery / Master password ----------------------------------------------
+
     def request_reset_master_password(self) -> None:
         if not self.vault.has_recovery_key():
             self.ui.show_error(self.ui.t("no_recovery_key"))
@@ -453,6 +494,7 @@ class MangoSafeApp:
         try:
             ok = self.vault.reset_master_password(recovery_token, new_password)
         except Exception:
+            self.log.exception("reset crashed.")
             ok = False
         if not ok:
             self.ui.show_error(self.ui.t("error_recovery_invalid"))
@@ -468,12 +510,13 @@ class MangoSafeApp:
         try:
             token = self.vault.create_recovery_key()
         except Exception:
-            self.ui.show_error(self.ui.t("error_recovery_create_failed"))
-            return
+            self.log.exception("recovery key creation failed.")
+            token = None
         if not token:
             self.ui.show_error(self.ui.t("error_recovery_create_failed"))
             return
-        self.ui.show_recovery_key(token, lambda: self.ui.show_main_screen(self._load_entries_safely()))
+        self.ui.show_recovery_key(
+            token, lambda: self.ui.show_main_screen(self._load_entries_safely()))
 
     def change_master_password(self, old_password: str, new_password: str) -> None:
         if len(new_password) < 8:
@@ -482,12 +525,13 @@ class MangoSafeApp:
         try:
             ok = self.vault.change_master_password(old_password, new_password)
         except Exception:
+            self.log.exception("change master password failed.")
             ok = False
         if not ok:
             self.ui.show_error(self.ui.t("error_old_password_wrong"))
             return
         self.ui.show_toast(self.ui.t("master_password_changed"))
-        self.ui.show_main_screen(self._load_entries_safely())
+        self._refresh_main_screen_safe()
 
 
 def main() -> int:
