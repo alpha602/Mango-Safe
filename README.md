@@ -1,4 +1,4 @@
-# 🥭 MangoSafe
+# 🥭 MangoSafe 0.5.0
 
 **MangoSafe is a local, encrypted password manager focused on privacy and user-friendliness.**
 
@@ -30,11 +30,12 @@
 
 # 📸 Screenshots:
 
-Login: <img width="2871" height="1658" alt="Screenshot 2026-08-18 153821" src="https://github.com/user-attachments/assets/43cfd06b-c323-4cb4-8850-605b2420dc14" />
+Login: <img width="1152" height="802" alt="Screenshot 2026-10-13 231157" src="https://github.com/user-attachments/assets/87476f2c-ac55-492b-8ade-98e95b28b361" />
 
-Settings: <img width="2879" height="1642" alt="Screenshot 2026-08-18 153904" src="https://github.com/user-attachments/assets/2df9fda9-c8cf-4c33-97ed-44b98077b2a9" />
+Settings: <img width="1149" height="799" alt="Screenshot 2026-10-13 231440" src="https://github.com/user-attachments/assets/b693c05a-81d6-4a55-99fb-a5a9de1d8f20" />
+          <img width="1149" height="801" alt="Screenshot 2026-10-13 231525" src="https://github.com/user-attachments/assets/0e71ae36-970b-436f-ab79-c75e0e12c78e" />
 
-Main: <img width="2879" height="1664" alt="Screenshot 2026-08-18 153854" src="https://github.com/user-attachments/assets/5e0dd2f0-b8d3-43bb-86f8-1003a0888af9" />
+Main: <img width="1148" height="803" alt="Screenshot 2026-10-13 231813" src="https://github.com/user-attachments/assets/96b5a659-2d19-4ff9-a5f9-467b88e6b576" />
 
 # 🚀 Installation:
 
